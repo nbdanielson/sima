@@ -23,6 +23,7 @@ import sima.misc
 from sima.misc import mkdir_p, most_recent_key, affine_transform
 from sima.extract import extract_rois, save_extracted_signals
 from sima.ROI import ROIList
+from sima.neuropil import subtract_neuropil
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from sima.misc.tifffile import imsave
@@ -535,6 +536,29 @@ class ImagingDataset(object):
         else:
             return extract_rois(self, rois, signal_channel, remove_overlap,
                                 n_processes, demix_channel)
+
+    def subtract_neuropil(self, channel=0, label=None, subtraction_kwargs={}):
+        """Apply a neuropil subtraction algorithm to a signals set
+
+        Parameters
+        ----------
+        channel : string or int
+            The channel from which to subtract the neuropil signal.  The
+            neuropil signal is taken from this channel as well.
+        label : string
+            The label of the signals to subtract
+        subtraction_kwargs : dict
+            Keyword arguments accepted by the subtraction method
+
+        """
+        signals = self.signals(channel=channel)
+        if label is None:
+            label = most_recent_key(signals)
+
+        signals[label]['subtracted'] = subtract_neuropil(
+            self, channel, label, subtraction_kwargs)
+
+        #TODO: OPEN PKL FILE AND RE-SAVE SIGNALS DICT
 
     def save(self, savedir=None):
         """Save the ImagingDataset to a file."""

@@ -1,7 +1,8 @@
-import ndimage
+from scipy import ndimage
 import numpy as np
 import itertools as it
-from sima.ROI import ROIList
+from sima.ROI import ROI, ROIList
+from sima.extract import extract_rois
 from pudb import set_trace
 
 
@@ -39,7 +40,7 @@ def subtract_neuropil(imSet, channel, label, kwargs):
         for plane_mask in roi_mask:
             dilated_plane = plane_mask
             for iteration in range(neuropil_mask_params['min_distance']):
-                dilated_plane = ndimage.binary_opening(dilated_plane)
+                dilated_plane = ndimage.binary_dilation(dilated_plane)
             dilated_mask.append(dilated_plane)
 
         neuropil_mask = nonROI_mask - dilated_mask
@@ -51,17 +52,29 @@ def subtract_neuropil(imSet, channel, label, kwargs):
             for plane_mask in roi_mask:
                 include_plane = plane_mask
                 for iteration in range(neuropil_mask_params['max_distance']):
-                    include_plane = ndimage.binary_opening(include_plane)
+                    include_plane = ndimage.binary_dilation(include_plane)
             include_mask = np.array(include_mask)
             neuropil_mask *= include_mask
 
+        neuropil_roi = ROIList([ROI(mask=neuropil_mask)])
+
         # Calculate neuropil timecourse
+        neuropil_timecourse = extract_rois(imSet, neuropil_roi, channel)['raw']
 
         # Iterate over roi pixels to calculate a weights mask
+        for plane_idx, plane in enumerate(roi.mask):
+            (x_coords, y_coords) = np.where(plane.todense())
+
+            weights = 0.
+            for x, y in it.izip(x_coords, y_coords):
+                for sequence_idx in xrange(len(raw_signal)):
+                    #TODO: MAKE SURE Y, X ORDER IS CORRECT
+                    imSet.sequences[sequence_idx][:, plane_idx, y, x, channel]
+
+                    #MAKE A NEW SLICED IMAGING DATASET OF 1 PIXEL, THEN EXTRACT A 1-PIXEL ROI! TO GET TIMECOURSE
+
+
 
         # Extract a contamination timecourse (normalized sum of weights) * neuropil timecourse
 
         # return a list (of lists?  Need to deal with cycles)
-
-
-        set_trace()

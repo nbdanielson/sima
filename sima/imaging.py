@@ -555,7 +555,7 @@ class ImagingDataset(object):
             label = most_recent_key(signals)
 
         signals[label]['subtracted'] = subtract_neuropil(
-            self, channel, label, subtraction_kwargs)
+            self, self._resolve_channel(channel), label, subtraction_kwargs)
 
         #TODO: OPEN PKL FILE AND RE-SAVE SIGNALS DICT
 

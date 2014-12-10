@@ -1,3 +1,20 @@
+"""
+Neuropil subtraction algorithm.  A boolean neuropil mask is defined for each
+ROI object, and the corresponding neuropil timecourse is calculated.  The
+corrected timecourse s(t) is defined as
+
+s(t) = r(t) - a * n(t)
+
+where r is the raw ROI timecourse and a is scalar-valued constant
+
+
+References
+----------
+* Gobel and Helmchen. 2007. Physiology. 22: 358-65.
+* Kerlin et al. 2010. Neuron. 67(5): 858-71.
+
+"""
+
 from scipy import ndimage
 import numpy as np
 import itertools as it
@@ -26,7 +43,7 @@ def subtract_neuropil(imSet, channel, label, kwargs):
     nonROI_mask = np.array(nonROI_mask)
 
     # Create the non-ROI mask
-    for roi in rois:
+    for roi in rois[:5]:
         for plane in xrange(len(roi.mask)):
             nonROI_mask[plane] -= roi.mask[plane].todense()
         nonROI_mask[nonROI_mask < 0] = 0
@@ -41,10 +58,10 @@ def subtract_neuropil(imSet, channel, label, kwargs):
     # One neuropil mask for all ROIs
     if params['max_distance'] is None and \
             (params['min_distance'] == 0 or params['buffer_rois'] is True):
-        neuropil_rois.append(ROI(mask=nonROI_mask))
+        neuropil_rois.append(ROI(mask=nonROI_mask.astype(bool)))
     # Each ROI has a unique neuropil mask
     else:
-        for roi in rois:
+        for roi in rois[:5]:
             roi_mask = []
             for plane in range(len(roi.mask)):
                 roi_mask.append(roi.mask[plane].todense())
@@ -76,12 +93,16 @@ def subtract_neuropil(imSet, channel, label, kwargs):
                     include_mask.append(include_plane)
                 include_mask = np.array(include_mask)
                 neuropil_mask *= include_mask
-            neuropil_rois.append(ROI(mask=neuropil_mask))
+            neuropil_rois.append(ROI(mask=neuropil_mask.astype(bool)))
     neuropil_rois = ROIList(neuropil_rois)
-    # TODO: enforce all neuropil ROIs are not empty?  Will cause extract error
+
+    for roi in neuropil_rois:
+        assert np.any([m.nnz > 0 for m in roi.mask])
 
     # Calculate neuropil timecourse
-    neuropil_signals = extract_rois(imSet, neuropil_rois, channel)['raw']
+    neuropil_signals = extract_rois(
+        imSet, neuropil_rois, channel, remove_overlap=False)['raw']
+    set_trace()
 
     # should be a list of 2D numpy arrays (rois x time)
     corrected_timecourses = []
@@ -92,7 +113,7 @@ def subtract_neuropil(imSet, channel, label, kwargs):
 
         sequence_signals = []
         for raw_timecourse, neuropil_timecourse in it.izip(
-                raw_signals, neuropil_signals):
+                raw_signals[:5], neuropil_signals[:5]):
             sequence_signals.append(
                 raw_timecourse - params['contamination_ratio'] *
                 neuropil_timecourse)

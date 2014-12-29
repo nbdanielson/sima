@@ -17,10 +17,10 @@ References
 
 from scipy import ndimage
 import numpy as np
+import pandas as pd
 import itertools as it
 from sima.ROI import ROI, ROIList
 from sima.extract import extract_rois
-from pudb import set_trace
 
 
 def subtract_neuropil(imSet, channel, label, kwargs):
@@ -43,7 +43,7 @@ def subtract_neuropil(imSet, channel, label, kwargs):
     nonROI_mask = np.array(nonROI_mask)
 
     # Create the non-ROI mask
-    for roi in rois[:5]:
+    for roi in rois:
         for plane in xrange(len(roi.mask)):
             nonROI_mask[plane] -= roi.mask[plane].todense()
         nonROI_mask[nonROI_mask < 0] = 0
@@ -61,7 +61,7 @@ def subtract_neuropil(imSet, channel, label, kwargs):
         neuropil_rois.append(ROI(mask=nonROI_mask.astype(bool)))
     # Each ROI has a unique neuropil mask
     else:
-        for roi in rois[:5]:
+        for roi in rois:
             roi_mask = []
             for plane in range(len(roi.mask)):
                 roi_mask.append(roi.mask[plane].todense())
@@ -102,20 +102,33 @@ def subtract_neuropil(imSet, channel, label, kwargs):
     # Calculate neuropil timecourse
     neuropil_signals = extract_rois(
         imSet, neuropil_rois, channel, remove_overlap=False)['raw']
-    set_trace()
+
+    neuropil_smoothed = []
+    for seq_idx in xrange(len(neuropil_signals)):
+        df = pd.DataFrame(neuropil_signals[seq_idx].T)
+
+        WINDOW_SIZE = 45
+        SIGMA = 5
+        neuropil_smoothed.append(pd.stats.moments.rolling_window(
+            df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
+            win_type='gaussian', std=SIGMA).values.T)
 
     # should be a list of 2D numpy arrays (rois x time)
     corrected_timecourses = []
     for seq_idx in xrange(len(raw_signals)):
         if len(neuropil_signals[seq_idx]) == 1:
-            neuropil_signals[seq_idx] = \
-                [neuropil_signals[seq_idx][0]] * len(raw_signals[seq_idx])
+            neuropil_smoothed[seq_idx] = \
+                [neuropil_smoothed[seq_idx][0]] * len(raw_signals[seq_idx])
 
         sequence_signals = []
         for raw_timecourse, neuropil_timecourse in it.izip(
-                raw_signals[:5], neuropil_signals[:5]):
+                raw_signals[seq_idx], neuropil_smoothed[seq_idx]):
+
+            normed_neuropil = neuropil_timecourse * \
+                (np.median(raw_timecourse) / np.median(neuropil_timecourse))
+
             sequence_signals.append(
-                raw_timecourse - params['contamination_ratio'] *
-                neuropil_timecourse)
+                raw_timecourse - normed_neuropil + np.median(raw_timecourse))
         corrected_timecourses.append(np.array(sequence_signals))
-    set_trace()
+    return corrected_timecourses
+

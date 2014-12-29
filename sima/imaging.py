@@ -555,14 +555,16 @@ class ImagingDataset(object):
             Keyword arguments accepted by the subtraction method
 
         """
+        channel = self._resolve_channel(channel)
         signals = self.signals(channel=channel)
         if label is None:
             label = most_recent_key(signals)
 
         signals[label]['subtracted'] = subtract_neuropil(
-            self, self._resolve_channel(channel), label, subtraction_kwargs)
+            self, channel, label, subtraction_kwargs)
 
-        #TODO: OPEN PKL FILE AND RE-SAVE SIGNALS DICT
+        with open(join(self.savedir, 'signals_{}.pkl'.format(channel)), 'wb') as f:
+            pickle.dump(signals, f, pickle.HIGHEST_PROTOCOL)
 
     def save(self, savedir=None):
         """Save the ImagingDataset to a file."""

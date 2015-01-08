@@ -531,7 +531,8 @@ class _Sequence_HDF5(_IndexableSequence):
         if key is None:
             if len(self._group.keys()) != 1:
                 raise ValueError(
-                    'key must be provided to resolve ambiguity.')
+                    'The HDF file has multiple datasets within the specified' + 
+		    ' group. Specify a key for the desired dataset.')
             key = self._group.keys()[0]
         self._key = key
         self._dataset = self._group[key]

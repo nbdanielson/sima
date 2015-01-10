@@ -16,6 +16,7 @@ includes methods for saving, sorting, and sub-grouping.
 from scipy.sparse import lil_matrix, issparse
 import numpy as np
 import cPickle as pickle
+import itertools as it
 from itertools import product
 from datetime import datetime
 from warnings import warn
@@ -303,7 +304,7 @@ class ROIList(list):
         self.timestamp = timestamp
 
     @classmethod
-    def load(cls, path, label=None, fmt='pkl'):
+    def load(cls, path, label=None, fmt='pkl', reassign_label=False):
         """Initialize an ROIList from either a saved pickle file or an
         Imagej ROI zip file.
 
@@ -317,6 +318,8 @@ class ROIList(list):
             recently saved ROIList will be selected.
         fmt : {'pkl', 'ImageJ'}
             The file format being imported.
+        reassign_label: boolean
+            If true, assign ascending integer strings as labels
 
         Returns
         -------
@@ -334,32 +337,39 @@ class ROIList(list):
             except KeyError:
                 raise Exception(
                     'No ROIs with were saved with the given label.')
-            return cls(**rois)
+            roi_list = cls(**rois)
         elif fmt == 'ImageJ':
-            return cls(rois=sima.misc.imagej.read_imagej_roi_zip(path))
+            roi_list = cls(rois=sima.misc.imagej.read_imagej_roi_zip(path))
         else:
             raise ValueError('Unrecognized file format.')
+        if reassign_label:
+            for idx, roi in it.izip(it.count(), roi_list):
+                roi.label = str(idx)
+        return roi_list
 
-    def transform(self, transforms, copy_properties=True):
+    def transform(self, transforms, im_shape=None, copy_properties=True):
         """Apply 2x3 affine transformations to the ROIs
 
         Parameters
         ----------
         transforms : list of 2x3 Numpy arrays
             The affine transformations to be applied to the ROIs.  Length of
-            list should equal the number of planes (im_shape[0])
+            list should equal the number of planes (im_shape[0]).
+
+        im_shape : 3-element tuple, optional
+            The (zyx) shape of the target image. If None, must be set before
+            any ROI can be converted to a mask.
 
         copy_properties : bool, optional
-            Copy the label, id, tags, and im_shape properties from the source
-            ROIs to the transformed ROIs
+            Copy the label, id, and tags properties from the source
+            ROIs to the transformed ROIs.
 
         Returns
         -------
         sima.ROI.ROIList
             Returns an ROIList consisting of the transformed ROI objects.
+
         """
-        # This should still work if im_shape is None
-        # assert len(transforms) == self[0].im_shape[0]
         transformed_rois = []
         for roi in self:
             transformed_polygons = []
@@ -371,12 +381,12 @@ class ROIList(list):
                 transformed_coords = [np.hstack((coords, z)) for coords in
                                       transformed_coords]
                 transformed_polygons.append(transformed_coords)
-            transformed_roi = ROI(polygons=transformed_polygons)
+            transformed_roi = ROI(
+                polygons=transformed_polygons, im_shape=im_shape)
             if copy_properties:
                 transformed_roi.label = roi.label
                 transformed_roi.id = roi.id
                 transformed_roi.tags = roi.tags
-                transformed_roi.im_shape = roi.im_shape
             transformed_rois.append(transformed_roi)
         return ROIList(rois=transformed_rois)
 

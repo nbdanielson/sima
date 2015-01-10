@@ -27,7 +27,8 @@ from sima.extract import extract_rois
 from pudb import set_trace
 
 
-def subtract_neuropil(imSet, channel, label, kwargs):
+def subtract_neuropil(imSet, channel, label, min_distance = 0, max_distance = None, buffer_rois = True,\
+        contamination_ratio = 0.5):
 
     set_trace()
 
@@ -35,14 +36,6 @@ def subtract_neuropil(imSet, channel, label, kwargs):
     signals = imSet.signals(channel=channel)
     raw_signals = signals[label]['raw']
     rois = ROIList(signals[label]['rois'])
-
-    # Set mask parameter defaults
-    params = {'min_distance': 0, 'max_distance': None, 'buffer_rois': True,
-              'contamination_ratio': 0.5}
-
-    for param, value in kwargs.iteritems():
-        if param in params:
-            params[param] = value
 
     # Initialize mask (all True).  shape is zyx
     nonROI_mask = []  # one level for each z-plane
@@ -57,17 +50,17 @@ def subtract_neuropil(imSet, channel, label, kwargs):
         nonROI_mask[nonROI_mask < 0] = 0
 
     #buffer ROIs if necessary
-    if params['buffer_rois']:
+    if buffer_rois:
         for plane in xrange(len(nonROI_mask)):
             inv_mask = ~nonROI_mask[plane].astype(bool)
-            for iteration in xrange(params['min_distance']):
+            for iteration in xrange(min_distance):
                 inv_mask = ndimage.binary_dilation(inv_mask)
             nonROI_mask[plane] = (~inv_mask).astype(float)
 
     neuropil_rois = []
     # One neuropil mask for all ROIs
-    if params['max_distance'] is None and \
-            (params['min_distance'] == 0 or params['buffer_rois'] is True):
+    if max_distance is None and \
+            (min_distance == 0 or buffer_rois is True):
         neuropil_rois.append(ROI(mask=nonROI_mask.astype(bool)))
     # Each ROI has a unique neuropil mask
     else:
@@ -78,11 +71,11 @@ def subtract_neuropil(imSet, channel, label, kwargs):
             roi_mask = np.array(roi_mask)
 
             # Subtract the dilated ROI from the neuropil mask if necessary
-            if not params['buffer_rois'] and params['min_distance'] > 0:
+            if not buffer_rois and min_distance > 0:
                 dilated_mask = []
                 for plane_mask in roi_mask:
                     dilated_plane = plane_mask
-                    for iteration in range(params['min_distance']):
+                    for iteration in range(min_distance):
                         dilated_plane = ndimage.binary_dilation(dilated_plane)
                     dilated_mask.append(dilated_plane)
                 dilated_mask = np.array(dilated_mask)
@@ -94,11 +87,11 @@ def subtract_neuropil(imSet, channel, label, kwargs):
             # Apply max distance threshold.
             # Note this procedure enforces neuropil signal is taken only from
             # planes on which the ROI is defined
-            if params['max_distance'] is not None:
+            if max_distance is not None:
                 include_mask = []
                 for plane_mask in roi_mask:
                     include_plane = plane_mask
-                    for iteration in range(params['max_distance']):
+                    for iteration in range(max_distance):
                         include_plane = ndimage.binary_dilation(include_plane)
                     include_mask.append(include_plane)
                 include_mask = np.array(include_mask)

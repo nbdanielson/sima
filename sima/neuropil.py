@@ -22,9 +22,14 @@ import itertools as it
 from sima.ROI import ROI, ROIList
 from sima.extract import extract_rois
 
+from pudb import set_trace
+
 
 def subtract_neuropil(imSet, channel, label, kwargs):
 
+    set_trace()
+
+    # pulling out the raw imaging signals (one t-series per sequence per ROI)
     signals = imSet.signals(channel=channel)
     raw_signals = signals[label]['raw']
     rois = ROIList(signals[label]['rois'])
@@ -37,6 +42,7 @@ def subtract_neuropil(imSet, channel, label, kwargs):
         if param in params:
             params[param] = value
 
+    # Initialize mask (all True).  shape is zyx
     nonROI_mask = []  # one level for each z-plane
     for plane in xrange(len(rois[0].mask)):
         nonROI_mask.append(np.ones(rois[0].mask[plane].todense().shape))
@@ -47,6 +53,8 @@ def subtract_neuropil(imSet, channel, label, kwargs):
         for plane in xrange(len(roi.mask)):
             nonROI_mask[plane] -= roi.mask[plane].todense()
         nonROI_mask[nonROI_mask < 0] = 0
+
+    #buffer ROIs if necessary
     if params['buffer_rois']:
         for plane in xrange(len(nonROI_mask)):
             inv_mask = ~nonROI_mask[plane].astype(bool)

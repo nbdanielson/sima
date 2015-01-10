@@ -549,7 +549,8 @@ class ImagingDataset(object):
             return extract_rois(self, rois, signal_channel, remove_overlap,
                                 n_processes, demix_channel)
 
-    def subtract_neuropil(self, channel=0, label=None, subtraction_kwargs={}):
+    def subtract_neuropil(self, channel=0, label=None,min_distance = 0,\
+            max_distance = None, buffer_rois = True, contamination_ratio = 0.5):
         """Apply a neuropil subtraction algorithm to a signals set
 
         Parameters
@@ -559,17 +560,19 @@ class ImagingDataset(object):
             neuropil signal is taken from this channel as well.
         label : string
             The label of the signals to subtract
-        subtraction_kwargs : dict
-            Keyword arguments accepted by the subtraction method
-
+        min_distance : 0
+        max_distance : None
+        buffer_rois : True
+        contamination_ratio : 0.5
         """
         channel = self._resolve_channel(channel)
         signals = self.signals(channel=channel)
         if label is None:
             label = most_recent_key(signals)
 
-        signals[label]['subtracted'] = subtract_neuropil(
-            self, channel, label, subtraction_kwargs)
+        signals[label]['subtracted'] = subtract_neuropil(self, channel, label,\
+                min_distance = 0, max_distance = None, buffer_rois = True, \
+                contamination_ratio = 0.5)
 
         with open(join(self.savedir, 'signals_{}.pkl'.format(channel)), 'wb') as f:
             pickle.dump(signals, f, pickle.HIGHEST_PROTOCOL)

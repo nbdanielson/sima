@@ -44,7 +44,7 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, max_distance = No
 
     # Create the non-ROI mask
 
-    for plane in xrange(len(roi.mask)):
+    for plane in xrange(len(rois[0].mask)):
         all_roi_mask = sum([roi.mask[plane].tocsr() for roi in rois]).todense()
         all_roi_mask = all_roi_mask.astype(bool)
         nonROI_mask[plane] -= all_roi_mask

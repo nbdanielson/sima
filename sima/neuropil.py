@@ -23,9 +23,8 @@ import pandas as pd
 import itertools as it
 from sima.ROI import ROI, ROIList
 from sima.extract import extract_rois
-
 from pudb import set_trace
-
+import timeit as ti
 
 def subtract_neuropil(imSet, channel, label, min_distance = 0, max_distance = None, buffer_rois = True,\
         contamination_ratio = 0.5):
@@ -44,12 +43,12 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, max_distance = No
     nonROI_mask = np.array(nonROI_mask)
 
     # Create the non-ROI mask
-    for roi in rois:
-        for plane in xrange(len(roi.mask)):
-            nonROI_mask[plane] -= roi.mask[plane].todense()
-        nonROI_mask[nonROI_mask < 0] = 0
 
-    #buffer ROIs if necessary
+    for plane in xrange(len(roi.mask)):
+        all_roi_mask = sum([roi.mask[plane].tocsr() for roi in rois]).todense()
+        all_roi_mask = all_roi_mask.astype(bool)
+        nonROI_mask[plane] -= all_roi_mask
+
     if buffer_rois:
         for plane in xrange(len(nonROI_mask)):
             inv_mask = ~nonROI_mask[plane].astype(bool)

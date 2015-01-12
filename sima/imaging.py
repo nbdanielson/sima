@@ -158,7 +158,7 @@ class ImagingDataset(object):
             seq_indices = slice(seq_indices, seq_indices + 1)
         sequences = [seq[tuple(indices)] for seq in self.sequences][
             seq_indices]
-        return ImagingDataset(sequences, None, info=self.info)
+        return ImagingDataset(sequences, None, channel_names = self.channel_names, info=self.info)
 
     @property
     def channel_names(self):

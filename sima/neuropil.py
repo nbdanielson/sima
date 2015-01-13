@@ -24,86 +24,44 @@ import itertools as it
 from sima.ROI import ROI, ROIList
 from sima.extract import extract_rois
 from pudb import set_trace
-import timeit as ti
 
-def subtract_neuropil(imSet, channel, label, min_distance = 0, max_distance = None, buffer_rois = True,\
-        contamination_ratio = 0.5):
-
-    set_trace()
+def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3), contamination_ratio = 0.5):
 
     # pulling out the raw imaging signals (one t-series per sequence per ROI)
     signals = imSet.signals(channel=channel)
     raw_signals = signals[label]['raw']
     rois = ROIList(signals[label]['rois'])
-
+    #OK
     # Initialize mask (all True).  shape is zyx
     nonROI_mask = []  # one level for each z-plane
     for plane in xrange(len(rois[0].mask)):
         nonROI_mask.append(np.ones(rois[0].mask[plane].todense().shape))
     nonROI_mask = np.array(nonROI_mask)
-
+    #OK
     # Create the non-ROI mask
-
+    set_trace()
+    neuropil_rois= []
     for plane in xrange(len(rois[0].mask)):
         all_roi_mask = sum([roi.mask[plane].tocsr() for roi in rois]).todense()
         all_roi_mask = all_roi_mask.astype(bool)
-        nonROI_mask[plane] -= all_roi_mask
+        dilated_mask = ndimage.binary_dilation(all_roi_mask, iterations=min_distance)
+        nonROI_mask[plane] -= dilated_mask
 
-    if buffer_rois:
-        for plane in xrange(len(nonROI_mask)):
-            inv_mask = ~nonROI_mask[plane].astype(bool)
-            for iteration in xrange(min_distance):
-                inv_mask = ndimage.binary_dilation(inv_mask)
-            nonROI_mask[plane] = (~inv_mask).astype(float)
-
-    neuropil_rois = []
-    # One neuropil mask for all ROIs
-    if max_distance is None and \
-            (min_distance == 0 or buffer_rois is True):
-        neuropil_rois.append(ROI(mask=nonROI_mask.astype(bool)))
-    # Each ROI has a unique neuropil mask
-    else:
-        for roi in rois:
-            roi_mask = []
-            for plane in range(len(roi.mask)):
-                roi_mask.append(roi.mask[plane].todense())
-            roi_mask = np.array(roi_mask)
-
-            # Subtract the dilated ROI from the neuropil mask if necessary
-            if not buffer_rois and min_distance > 0:
-                dilated_mask = []
-                for plane_mask in roi_mask:
-                    dilated_plane = plane_mask
-                    for iteration in range(min_distance):
-                        dilated_plane = ndimage.binary_dilation(dilated_plane)
-                    dilated_mask.append(dilated_plane)
-                dilated_mask = np.array(dilated_mask)
-                neuropil_mask = nonROI_mask - dilated_mask
-                neuropil_mask[neuropil_mask < 0] = 0
-            else:
-                neuropil_mask = np.copy(nonROI_mask)
-
-            # Apply max distance threshold.
-            # Note this procedure enforces neuropil signal is taken only from
-            # planes on which the ROI is defined
-            if max_distance is not None:
-                include_mask = []
-                for plane_mask in roi_mask:
-                    include_plane = plane_mask
-                    for iteration in range(max_distance):
-                        include_plane = ndimage.binary_dilation(include_plane)
-                    include_mask.append(include_plane)
-                include_mask = np.array(include_mask)
-                neuropil_mask *= include_mask
-            neuropil_rois.append(ROI(mask=neuropil_mask.astype(bool)))
-    neuropil_rois = ROIList(neuropil_rois)
-
-    for roi in neuropil_rois:
-        assert np.any([m.nnz > 0 for m in roi.mask])
+    # Gets coordinates of ROI boundaries; bounds right inclusive, bottom inclusive
+        x = nonROI_mask[plane].shape[0]
+        y = nonROI_mask[plane].shape[1]
+        x_bounds = map(int,np.linspace(-1, x, grid_dim[0]+1))
+        y_bounds = map(int, np.linspace(-1, y, grid_dim[1]+1))
+        grid = [[np.zeros([x,y]) for i in xrange(grid_dim[0])] for j in xrange(grid_dim[1])]
+        for i in xrange(len(x_bounds)-1):
+            for j in xrange(len(y_bounds)-1):
+                grid[i][j][x_bounds[i]+1:x_bounds[i+1],y_bounds[j]+1:y_bounds[j+1]] = 1
+                neuropil_rois.append(ROI(mask=grid[i][j]*nonROI_mask[plane].astype(bool)))
+        neuropil_rois = ROIList(neuropil_rois)
 
     # Calculate neuropil timecourse
-    neuropil_signals = extract_rois(
-        imSet, neuropil_rois, channel, remove_overlap=False)['raw']
+    neuropil_signals = extract_rois( \
+        imSet, neuropil_rois, channel, remove_overlap=True)['raw']
 
     neuropil_smoothed = []
     for seq_idx in xrange(len(neuropil_signals)):

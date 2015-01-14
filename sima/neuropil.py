@@ -39,7 +39,6 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
     nonROI_mask = np.array(nonROI_mask)
     #OK
     # Create the non-ROI mask
-    set_trace()
     neuropil_rois= []
     for plane in xrange(len(rois[0].mask)):
         all_roi_mask = sum([roi.mask[plane].tocsr() for roi in rois]).todense()
@@ -56,13 +55,13 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
         for i in xrange(len(x_bounds)-1):
             for j in xrange(len(y_bounds)-1):
                 grid[i][j][x_bounds[i]+1:x_bounds[i+1],y_bounds[j]+1:y_bounds[j+1]] = 1
-                neuropil_rois.append(ROI(mask=grid[i][j]*nonROI_mask[plane].astype(bool)))
+                neuropil_rois.append(ROI(mask=(grid[i][j]*nonROI_mask[plane]).astype(bool)))
         neuropil_rois = ROIList(neuropil_rois)
 
     # Calculate neuropil timecourse
     neuropil_signals = extract_rois( \
         imSet, neuropil_rois, channel, remove_overlap=True)['raw']
-
+    set_trace()
     neuropil_smoothed = []
     for seq_idx in xrange(len(neuropil_signals)):
         df = pd.DataFrame(neuropil_signals[seq_idx].T)
@@ -75,20 +74,25 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
 
     # should be a list of 2D numpy arrays (rois x time)
     corrected_timecourses = []
+ # Calculate centroid of neuropil ROIs
+    neuropil_centroids = [[((x_bounds[i]+x_bounds[i+1])/2,(y_bounds[i]+y_bounds[i+1])/2)\
+            for j in xrange(len(y_bounds)-1)] for i in xrange(len(x_bounds)-1)]
+    neuropil_centroids = np.array(neuropil_centroids)
+    roi_info = []
+    for roi in rois:
+        roi_centroid = array(roi.MultiPolygon.centroid.coords)
+        roi_tile = (np.where(roi_centroid[0] < x_bounds)[0][0], np.where(roi_centroid[1] < y_bounds)[0][0])
+        roi_info.append((roi_centroid, roi_tile))
     for seq_idx in xrange(len(raw_signals)):
-        if len(neuropil_signals[seq_idx]) == 1:
-            neuropil_smoothed[seq_idx] = \
-                [neuropil_smoothed[seq_idx][0]] * len(raw_signals[seq_idx])
-
         sequence_signals = []
-        for raw_timecourse, neuropil_timecourse in it.izip(
-                raw_signals[seq_idx], neuropil_smoothed[seq_idx]):
-
-            normed_neuropil = neuropil_timecourse * \
-                (np.median(raw_timecourse) / np.median(neuropil_timecourse))
-
-            sequence_signals.append(
-                raw_timecourse - normed_neuropil + np.median(raw_timecourse))
-        corrected_timecourses.append(np.array(sequence_signals))
+        for raw_timecourse, roi in it.izip(raw_signals[seq_idx], roi_info):
+            roi_centroid = roi[0]
+            roi_tile = roi[1]
+            for i in [-1,0,1]:
+                for j in [-1,0,1]:
+                     if roi_tile[0]+i in xrange(grid_dim[0]) and roi_tile[1]+j in xrange(grid_dim[1]):
+                         s = distance(array(roi_centroid), array(neuropil_centroids[roi_tile]))
+                         corrected_timecourse = raw_timecourse - contamination_ratio/(1 + s**2)*neuropil_smoothed[seq_idx][3*i+j]
+                         corrected_timecourses.append(np.array(corrected_timecourse))
     return corrected_timecourses
 

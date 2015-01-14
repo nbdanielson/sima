@@ -80,7 +80,7 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
     neuropil_centroids = np.array(neuropil_centroids)
     roi_info = []
     for roi in rois:
-        roi_centroid = array(roi.MultiPolygon.centroid.coords)
+        roi_centroid = np.array(roi.MultiPolygon.centroid.coords)
         roi_tile = (np.where(roi_centroid[0] < x_bounds)[0][0], np.where(roi_centroid[1] < y_bounds)[0][0])
         roi_info.append((roi_centroid, roi_tile))
     for seq_idx in xrange(len(raw_signals)):

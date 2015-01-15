@@ -9,7 +9,6 @@ from os.path import dirname, join, abspath
 import cPickle as pickle
 from distutils.version import StrictVersion
 from distutils.util import strtobool
-from pudb import set_trace
 
 import numpy as np
 try:

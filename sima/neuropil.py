@@ -18,6 +18,7 @@ References
 #  THIS IS A COMMENT FROM ZHENRUI
 
 from scipy import ndimage
+from matplotlib.mlab import dist
 import numpy as np
 import pandas as pd
 import itertools as it
@@ -78,18 +79,15 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
     neuropil_centroids = [[((x_bounds[i]+x_bounds[i+1])/2,(y_bounds[i]+y_bounds[i+1])/2)\
             for j in xrange(len(y_bounds)-1)] for i in xrange(len(x_bounds)-1)]
     neuropil_centroids = np.array(neuropil_centroids)
-    roi_info = []
+    roi_centroids = []
     for roi in rois:
-        roi_centroid = np.array(roi.MultiPolygon.centroid.coords)
-        roi_tile = (np.where(roi_centroid[0] < x_bounds)[0][0], np.where(roi_centroid[1] < y_bounds)[0][0])
-        roi_info.append((roi_centroid, roi_tile))
+        roi_centroid = np.array(roi.polygons.centroid.coords)
+        roi_centroids.append(roi_centroid)
     for seq_idx in xrange(len(raw_signals)):
         sequence_signals = []
-        for raw_timecourse, roi in it.izip(raw_signals[seq_idx], roi_info):
-            roi_centroid = roi[0]
-            roi_tile = roi[1]
+        for raw_timecourse, roi_centroid in it.izip(raw_signals[seq_idx], roi_centroids):
             corrected_timecourse = raw_timecourse
-            distances = map(lambda x: dist(x,array(roi_centroid)), neuropil_centroids)
+            distances = map(lambda x: dist(x,np.array(roi_centroid)), neuropil_centroids)
             distances = np.array(distances)
             rel_weights = 1/(1+distances**2)
             weights = rel_weights / sum(1/(1+distances**2))

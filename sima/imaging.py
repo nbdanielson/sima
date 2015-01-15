@@ -9,6 +9,7 @@ from os.path import dirname, join, abspath
 import cPickle as pickle
 from distutils.version import StrictVersion
 from distutils.util import strtobool
+from pudb import set_trace
 
 import numpy as np
 try:
@@ -550,7 +551,7 @@ class ImagingDataset(object):
                                 n_processes, demix_channel)
 
     def subtract_neuropil(self, channel=0, label=None,min_distance = 0,\
-            max_distance = None, buffer_rois = True, contamination_ratio = 0.5):
+            contamination_ratio = 0.5):
         """Apply a neuropil subtraction algorithm to a signals set
 
         Parameters
@@ -571,8 +572,7 @@ class ImagingDataset(object):
             label = most_recent_key(signals)
 
         signals[label]['subtracted'] = subtract_neuropil(self, channel, label,\
-                min_distance = 0, max_distance = None, buffer_rois = True, \
-                contamination_ratio = 0.5)
+                min_distance = min_distance, contamination_ratio = 0.5)
 
         with open(join(self.savedir, 'signals_{}.pkl'.format(channel)), 'wb') as f:
             pickle.dump(signals, f, pickle.HIGHEST_PROTOCOL)

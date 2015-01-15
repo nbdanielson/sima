@@ -1,9 +1,9 @@
 # Unit tests for sima/ROI.py
-# Tests follow conventions for NumPy/SciPy avialble at
+# Tests follow conventions for NumPy/SciPy available at
 # https://github.com/numpy/numpy/blob/master/doc/TESTS.rst.txt
 
 # use assert_() and related functions over the built in assert to ensure tests
-# run properly, regaurdless of how python is started.
+# run properly, regardless of how python is started.
 from numpy.testing import (
     assert_,
     assert_equal,
@@ -81,7 +81,7 @@ class TestROIList(object):
         roi = ROI.ROI(
             polygons=[[0, 0], [0, 2], [2, 2], [2, 0]],
             im_shape=(3, 3))
-        transforms = [[[1, 0, 0], [0, 1, 0]]]  # one per plane
+        transforms = [np.array([[1, 0, 0], [0, 1, 0]])]  # one per plane
 
         roi_list = ROI.ROIList([roi])
         assert_equal(

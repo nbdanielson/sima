@@ -27,6 +27,11 @@ from skimage.measure import find_contours
 import sima.misc
 import sima.misc.imagej
 
+import os
+import glob
+import re
+import scipy.io
+
 
 class NonBooleanMask(Exception):
     pass
@@ -311,12 +316,14 @@ class ROIList(list):
         Parameters
         ----------
         path : string
-            Path to either a pickled ROIList or an ImageJ ROI zip file.
+            Path to either a pickled ROIList, an ImageJ ROI zip file, or the
+            path to the direcotry containing the 'IC filter' .mat files for
+            inscopix/mosaic data.
         label : str, optional
             The label for selecting the ROIList if multiple ROILists
             have been saved in the same file. By default, the most
             recently saved ROIList will be selected.
-        fmt : {'pkl', 'ImageJ'}
+        fmt : {'pkl', 'ImageJ', 'inscopix'}
             The file format being imported.
         reassign_label: boolean
             If true, assign ascending integer strings as labels
@@ -340,6 +347,21 @@ class ROIList(list):
             roi_list = cls(**rois)
         elif fmt == 'ImageJ':
             roi_list = cls(rois=sima.misc.imagej.read_imagej_roi_zip(path))
+        elif fmt == 'inscopix':
+            dirnames = os.walk(path).next()[1]
+            # this naming convetion for ROI masks is used in Mosiac 1.0.0b
+            files = [glob.glob(os.path.join(path, dirname, '*IC filter*.mat'))
+                     for dirname in dirnames]
+            files = filter(lambda f: len(f) > 0, files)[0]
+
+            rois = []
+            for filename in files:
+                label = re.findall('\d+', filename)[-1]
+                data = scipy.io.loadmat(filename)
+                # this is the ROI mask index in Mosiac 1.0.0b
+                mask = data['Object'][0][0][11]
+                rois.append(ROI(mask=mask, id=label, im_shape=mask.shape))
+            roi_list = cls(rois=rois)
         else:
             raise ValueError('Unrecognized file format.')
         if reassign_label:
@@ -352,7 +374,7 @@ class ROIList(list):
 
         Parameters
         ----------
-        transforms : list of 2x3 Numpy arrays
+        transforms : list of GeometryTransforms or 2x3 Numpy arrays
             The affine transformations to be applied to the ROIs.  Length of
             list should equal the number of planes (im_shape[0]).
 
@@ -370,14 +392,18 @@ class ROIList(list):
             Returns an ROIList consisting of the transformed ROI objects.
 
         """
+
         transformed_rois = []
         for roi in self:
             transformed_polygons = []
             for coords in roi.coords:
                 z = coords[0][2]  # assuming all coords share a z-coordinate
-                transformed_coords = [np.dot(transforms[int(z)],
-                                             np.hstack([vert[:2], 1]))
-                                      for vert in coords]
+                if isinstance(transforms[0], np.ndarray):
+                    transformed_coords = [np.dot(transforms[int(z)],
+                                                 np.hstack([vert[:2], 1]))
+                                          for vert in coords]
+                else:
+                    transformed_coords = transforms[int(z)](coords[:, :2])
                 transformed_coords = [np.hstack((coords, z)) for coords in
                                       transformed_coords]
                 transformed_polygons.append(transformed_coords)

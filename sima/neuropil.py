@@ -27,7 +27,7 @@ from sima.extract import extract_rois
 from pudb import set_trace
 
 def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3), contamination_ratio = 0.5):
-
+    set_trace()
     # pulling out the raw imaging signals (one t-series per sequence per ROI)
     signals = imSet.signals(channel=channel)
     raw_signals = signals[label]['raw']
@@ -62,7 +62,6 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
     # Calculate neuropil timecourse
     neuropil_signals = extract_rois( \
         imSet, neuropil_rois, channel, remove_overlap=True)['raw']
-    set_trace()
     neuropil_smoothed = []
     for seq_idx in xrange(len(neuropil_signals)):
         df = pd.DataFrame(neuropil_signals[seq_idx].T)
@@ -76,7 +75,7 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
     # should be a list of 2D numpy arrays (rois x time)
     corrected_timecourses = []
  # Calculate centroid of neuropil ROIs
-    neuropil_centroids = [[((x_bounds[i]+x_bounds[i+1])/2,(y_bounds[i]+y_bounds[i+1])/2)\
+    neuropil_centroids = [[((x_bounds[i]+x_bounds[i+1])/2.0,(y_bounds[j]+y_bounds[j+1])/2.0)\
             for j in xrange(len(y_bounds)-1)] for i in xrange(len(x_bounds)-1)]
     neuropil_centroids = np.array(neuropil_centroids)
     roi_centroids = []
@@ -87,12 +86,14 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
         sequence_signals = []
         for raw_timecourse, roi_centroid in it.izip(raw_signals[seq_idx], roi_centroids):
             corrected_timecourse = raw_timecourse
-            distances = map(lambda x: dist(x,np.array(roi_centroid)), neuropil_centroids)
-            distances = np.array(distances)
+            distances = np.zeros(grid_dim)
+            for i in xrange(grid_dim[0]):
+                for j in xrange(grid_dim[1]):
+                    distances[i,j] = dist(roi_centroid, neuropil_centroid[i,j])
             rel_weights = 1/(1+distances**2)
             weights = rel_weights / sum(1/(1+distances**2))
             correction = np.array(neuropil_smoothed[seq_idx]).reshape(grid_dim, order='F')
-            weighted_correction <- weights*correction
+            weighted_correction = weights*correction
             corrected_timecourse = raw_timecourse - contamination_ratio*sum(weighted_correction)
             corrected_timecourses.append(np.array(corrected_timecourse))
     return corrected_timecourses

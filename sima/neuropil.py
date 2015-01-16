@@ -80,7 +80,7 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
     neuropil_centroids = np.array(neuropil_centroids)
     roi_centroids = []
     for roi in rois:
-        roi_centroid = np.array(roi.polygons.centroid.coords)
+        roi_centroid = np.array(roi.polygons.centroid.coords)[0]
         roi_centroids.append(roi_centroid)
     for seq_idx in xrange(len(raw_signals)):
         sequence_signals = []
@@ -89,11 +89,11 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
             distances = np.zeros(grid_dim)
             for i in xrange(grid_dim[0]):
                 for j in xrange(grid_dim[1]):
-                    distances[i,j] = dist(roi_centroid, neuropil_centroid[i,j])
+                    distances[i,j] = dist(roi_centroid, neuropil_centroids[i,j])
             rel_weights = 1/(1+distances**2)
             weights = rel_weights / sum(1/(1+distances**2))
-            correction = np.array(neuropil_smoothed[seq_idx]).reshape(grid_dim, order='F')
-            weighted_correction = weights*correction
+            correction = np.array(neuropil_smoothed[seq_idx]).reshape(grid_dim + [len(neuropil_smoothed[seq_idx][0,:])], order='F')
+            weighted_correction = map(lambda x: weights*x, correction)
             corrected_timecourse = raw_timecourse - contamination_ratio*sum(weighted_correction)
             corrected_timecourses.append(np.array(corrected_timecourse))
     return corrected_timecourses

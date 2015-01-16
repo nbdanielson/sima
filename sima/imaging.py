@@ -614,7 +614,7 @@ class ImagingDataset(object):
                                 n_processes, demix_channel)
 
     def subtract_neuropil(self, channel=0, label=None,min_distance = 0,\
-            contamination_ratio = 0.5):
+            grid_dim = (3,3), contamination_ratio = 0.5):
         """Apply a neuropil subtraction algorithm to a signals set
 
         Parameters
@@ -635,7 +635,7 @@ class ImagingDataset(object):
             label = most_recent_key(signals)
 
         signals[label]['subtracted'] = subtract_neuropil(self, channel, label,\
-                min_distance = min_distance, contamination_ratio = 0.5)
+                min_distance = min_distance, grid_dim = grid_dim, contamination_ratio = 0.5)
 
         with open(join(self.savedir, 'signals_{}.pkl'.format(channel)), 'wb') as f:
             pickle.dump(signals, f, pickle.HIGHEST_PROTOCOL)

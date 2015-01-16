@@ -26,8 +26,7 @@ from sima.ROI import ROI, ROIList
 from sima.extract import extract_rois
 from pudb import set_trace
 
-def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3), contamination_ratio = 0.5):
-    set_trace()
+def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3), contamination_ratio = 1):
     # pulling out the raw imaging signals (one t-series per sequence per ROI)
     signals = imSet.signals(channel=channel)
     raw_signals = signals[label]['raw']
@@ -92,10 +91,13 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
                     distances[i,j] = dist(roi_centroid, neuropil_centroids[i,j])
             rel_weights = 1/(1+distances**2)
             weights = rel_weights / sum(1/(1+distances**2))
-            correction = np.array(neuropil_smoothed[seq_idx]).reshape(grid_dim + (len(neuropil_smoothed[seq_idx][0,:]),), order='F')
+            correction = np.array(neuropil_smoothed[seq_idx]).reshape(\
+                    grid_dim + (len(neuropil_smoothed[seq_idx][0,:]),), order='F')
             medians = np.median(correction, axis = 2)
-            weighted_correction = map(lambda x: weights*(np.squeeze(x)-medians), np.dsplit(correction, len(neuropil_smoothed[seq_idx][0,:])))
-            correction_factors = np.array([np.sum(weighted_correction[i]) for i in xrange(len(neuropil_smoothed[seq_idx][0,:]))])
+            weighted_correction = map(lambda x: weights*(np.squeeze(x)-medians),\
+                    np.dsplit(correction, len(neuropil_smoothed[seq_idx][0,:])))
+            correction_factors = np.array([np.sum(weighted_correction[i])\
+                    for i in xrange(len(neuropil_smoothed[seq_idx][0,:]))])
             corrected_timecourse = raw_timecourse - contamination_ratio*correction_factors
             corrected_timecourses.append(corrected_timecourse)
     return corrected_timecourses

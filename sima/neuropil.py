@@ -95,7 +95,8 @@ def subtract_neuropil(imSet, channel, label, min_distance = 0, grid_dim =  (3,3)
             correction = np.array(neuropil_smoothed[seq_idx]).reshape(grid_dim + (len(neuropil_smoothed[seq_idx][0,:]),), order='F')
             medians = np.median(correction, axis = 2)
             weighted_correction = map(lambda x: weights*(np.squeeze(x)-medians), np.dsplit(correction, len(neuropil_smoothed[seq_idx][0,:])))
-            corrected_timecourse = raw_timecourse - contamination_ratio*np.array([np.sum(weighted_correction[i]) for i in xrange(len(neuropil_smoothed[seq_idx][0,:]))])
+            correction_factors = np.array([np.sum(weighted_correction[i]) for i in xrange(len(neuropil_smoothed[seq_idx][0,:]))])
+            corrected_timecourse = raw_timecourse - contamination_ratio*correction_factors
             corrected_timecourses.append(corrected_timecourse)
     return corrected_timecourses
 

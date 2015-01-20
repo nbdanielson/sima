@@ -16,6 +16,7 @@ includes methods for saving, sorting, and sub-grouping.
 from scipy.sparse import lil_matrix, issparse
 import numpy as np
 import cPickle as pickle
+import itertools as it
 from itertools import product
 from datetime import datetime
 from warnings import warn
@@ -25,6 +26,11 @@ from skimage.measure import find_contours
 
 import sima.misc
 import sima.misc.imagej
+
+import os
+import glob
+import re
+import scipy.io
 
 
 class NonBooleanMask(Exception):
@@ -303,20 +309,24 @@ class ROIList(list):
         self.timestamp = timestamp
 
     @classmethod
-    def load(cls, path, label=None, fmt='pkl'):
+    def load(cls, path, label=None, fmt='pkl', reassign_label=False):
         """Initialize an ROIList from either a saved pickle file or an
         Imagej ROI zip file.
 
         Parameters
         ----------
         path : string
-            Path to either a pickled ROIList or an ImageJ ROI zip file.
+            Path to either a pickled ROIList, an ImageJ ROI zip file, or the
+            path to the direcotry containing the 'IC filter' .mat files for
+            inscopix/mosaic data.
         label : str, optional
             The label for selecting the ROIList if multiple ROILists
             have been saved in the same file. By default, the most
             recently saved ROIList will be selected.
-        fmt : {'pkl', 'ImageJ'}
+        fmt : {'pkl', 'ImageJ', 'inscopix'}
             The file format being imported.
+        reassign_label: boolean
+            If true, assign ascending integer strings as labels
 
         Returns
         -------
@@ -334,18 +344,37 @@ class ROIList(list):
             except KeyError:
                 raise Exception(
                     'No ROIs with were saved with the given label.')
-            return cls(**rois)
+            roi_list = cls(**rois)
         elif fmt == 'ImageJ':
-            return cls(rois=sima.misc.imagej.read_imagej_roi_zip(path))
+            roi_list = cls(rois=sima.misc.imagej.read_imagej_roi_zip(path))
+        elif fmt == 'inscopix':
+            dirnames = os.walk(path).next()[1]
+            # this naming convetion for ROI masks is used in Mosiac 1.0.0b
+            files = [glob.glob(os.path.join(path, dirname, '*IC filter*.mat'))
+                     for dirname in dirnames]
+            files = filter(lambda f: len(f) > 0, files)[0]
+
+            rois = []
+            for filename in files:
+                label = re.findall('\d+', filename)[-1]
+                data = scipy.io.loadmat(filename)
+                # this is the ROI mask index in Mosiac 1.0.0b
+                mask = data['Object'][0][0][11]
+                rois.append(ROI(mask=mask, id=label, im_shape=mask.shape))
+            roi_list = cls(rois=rois)
         else:
             raise ValueError('Unrecognized file format.')
+        if reassign_label:
+            for idx, roi in it.izip(it.count(), roi_list):
+                roi.label = str(idx)
+        return roi_list
 
     def transform(self, transforms, im_shape=None, copy_properties=True):
         """Apply 2x3 affine transformations to the ROIs
 
         Parameters
         ----------
-        transforms : list of 2x3 Numpy arrays
+        transforms : list of GeometryTransforms or 2x3 Numpy arrays
             The affine transformations to be applied to the ROIs.  Length of
             list should equal the number of planes (im_shape[0]).
 
@@ -363,14 +392,18 @@ class ROIList(list):
             Returns an ROIList consisting of the transformed ROI objects.
 
         """
+
         transformed_rois = []
         for roi in self:
             transformed_polygons = []
             for coords in roi.coords:
                 z = coords[0][2]  # assuming all coords share a z-coordinate
-                transformed_coords = [np.dot(transforms[int(z)],
-                                             np.hstack([vert[:2], 1]))
-                                      for vert in coords]
+                if isinstance(transforms[0], np.ndarray):
+                    transformed_coords = [np.dot(transforms[int(z)],
+                                                 np.hstack([vert[:2], 1]))
+                                          for vert in coords]
+                else:
+                    transformed_coords = transforms[int(z)](coords[:, :2])
                 transformed_coords = [np.hstack((coords, z)) for coords in
                                       transformed_coords]
                 transformed_polygons.append(transformed_coords)

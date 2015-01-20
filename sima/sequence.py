@@ -29,7 +29,10 @@
 # For convenience, we have created iterable objects that can be used with
 # common data formats.
 
-
+try:
+    input = raw_input
+except NameError:  # Python 3
+    pass
 import itertools as it
 import glob
 import warnings
@@ -50,20 +53,13 @@ except ImportError:
     def samefile(file1, file2):
         return stat(file1) == stat(file2)
 
-try:
-    from libtiff import TIFF
-    libtiff_available = True
-except ImportError:
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        from sima.misc.tifffile import TiffFile
-    libtiff_available = False
+from PIL import Image
 try:
     import h5py
 except ImportError:
     h5py_available = False
 else:
-    h5py_available = StrictVersion(h5py.__version__) >= StrictVersion('2.3.1')
+    h5py_available = StrictVersion(h5py.__version__) >= StrictVersion('2.2.1')
 
 import sima.misc
 from sima.motion._motion import _align_frame
@@ -223,7 +219,7 @@ class Sequence(object):
 
         Parameters
         ----------
-        fmt : {'HDF5', 'TIFF', 'ndarray'}
+        fmt : {'HDF5', 'TIFF', 'TIFFs', 'ndarray'}
             The format of the data used to create the Sequence.
         *args, **kwargs
             Additional arguments depending on the data format.
@@ -291,6 +287,20 @@ class Sequence(object):
         such that they retain the same relative position.
 
 
+        **TIFFs**
+
+        paths : list of list of str
+            The string paths[i][j] is a unix style expression for the the
+            filenames for plane i and channel j. See glob for details.
+
+        Warning
+        -------
+        Moving the TIFF files may make this Sequence unusable
+        when the ImagingDataset is reloaded. The TIFF files can
+        only be moved if the ImagingDataset path is also moved
+        such that they retain the same relative position.
+
+
         **ndarray**
 
         array : numpy.ndarray
@@ -302,6 +312,8 @@ class Sequence(object):
             return _Sequence_HDF5(*args, **kwargs)
         elif fmt == 'TIFF':
             return _Sequence_TIFF_Interleaved(*args, **kwargs)
+        elif fmt == 'TIFFs':
+            return _Sequence_TIFFs(*args, **kwargs)
         elif fmt == 'ndarray':
             return _Sequence_ndarray(*args, **kwargs)
         else:
@@ -402,8 +414,6 @@ class _Sequence_TIFF_Interleaved(Sequence):
         self._num_channels = num_channels
         self._path = abspath(path)
         self._len = len_
-        if not libtiff_available:
-            self.stack = TiffFile(self._path)
 
     def __iter__(self):
         base_iter = self._iter_pages()
@@ -417,15 +427,17 @@ class _Sequence_TIFF_Interleaved(Sequence):
                  for _ in range(self._num_planes)], 0)
 
     def _iter_pages(self):
-        if libtiff_available:
-            tiff = TIFF.open(self._path, 'r')
-            for frame in tiff.iter_images():
-                yield frame.astype(float)
-        else:
-            for frame in self.stack.pages:
-                yield frame.asarray(colormapped=False)
-        if libtiff_available:
-            tiff.close()
+        idx = 0
+        images = Image.open(self._path, 'r')
+        while True:
+            try:
+                images.seek(idx)
+            except EOFError:
+                break
+            else:
+                idx += 1
+                yield np.array(images).astype(float)
+        images.close()
 
     def _todict(self, savedir=None):
         d = {'__class__': self.__class__,
@@ -460,7 +472,7 @@ class _IndexableSequence(Sequence):
     #     pass
 
 
-class _Sequence_TIFFs(_IndexableSequence):  # TODO: make indexible
+class _Sequence_TIFFs(_IndexableSequence):  # TODO: make indexable
     """
 
     Parameters
@@ -470,19 +482,35 @@ class _Sequence_TIFFs(_IndexableSequence):  # TODO: make indexible
         filenames for plane i and channel j. See glob for details.
     """
     def __init__(self, paths):
+        if not isinstance(paths, list):
+            raise ValueError('paths must be a list of list of str')
+            if not all(isinstance(p, list) for p in paths):
+                raise ValueError('paths must be a list of list of str')
         self._paths = np.array(
-            [[glob(channel) if isinstance(channel, str) else channel
+            [[glob.glob(channel) if isinstance(channel, str) else channel
               for channel in plane] for plane in paths]
         ).reshape(-1, len(paths), len(paths[0]))  # frames X planes X channels
+
+    def __len__(self):
+        return len(self._paths)
 
     def _get_frame(self, t):
 
         def arange_channels(plane):
-            if libtiff_available:
-                unpack = lambda p: TIFF.open(p, 'r').iterpages()
-            else:
-                unpack = lambda p: (im.asarray(colormapped=False)
-                                    for im in TiffFile(p).pages)
+
+            def unpack(p):
+                images = Image.open(p, 'r')
+                idx = 0
+                while True:
+                    try:
+                        images.seek(idx)
+                    except EOFError:
+                        break
+                    else:
+                        idx += 1
+                        yield np.array(images)
+                images.close()
+
             return np.concatenate([np.concatenate(
                 [np.expand_dims(a, 2) for a in unpack(path)],
                 axis=2).astype(float) for path in plane], axis=2)
@@ -546,6 +574,9 @@ class _Sequence_HDF5(_IndexableSequence):
         self._X_DIM = dim_order.find('x')
         self._C_DIM = dim_order.find('c')
         self._dim_order = dim_order
+
+    def __del__(self):
+        self._file.close()
 
     def __len__(self):
         return self._dataset.shape[self._T_DIM]
@@ -931,20 +962,44 @@ def _resolve_paths(d, savedir):
                         normcase(abspath(normpath(p2))))
     paths = set()
     try:
-        paths.add(abspath(join(savedir, d.pop('_relpath'))))
+        rel_path = d.pop('_relpath')
     except KeyError:
         pass
+    else:
+        paths.add(abspath(join(savedir, rel_path)))
+        # Windows to Unix conversion
+        paths.add(abspath(join(savedir, rel_path.replace('\\', '/'))))
+
     try:
         paths.add(d.pop('_abspath'))
     except KeyError:
         pass
     if len(paths):
-        paths = filter(isfile, paths)
-        if not len(paths):
-            raise Exception('Files have been moved. Cannot locate data.')
-        if len(paths) > 1:
-            testfile = paths.pop()
-            if not all(path_compare(testfile, p) for p in paths):
-                raise Exception('Files have been moved. The path '
-                                'cannot be unambiguously resolved.')
-        d['path'] = paths.pop()
+        valid_paths = filter(isfile, paths)
+        if not len(valid_paths):
+            error_msg = (
+                'Data could not be found in either of the following '
+                'locations:\n%s'
+                'Type a new path to the data and press ENTER: ') % \
+                ''.join('  ' + p + '\n' for p in paths)
+        elif len(valid_paths) > 1:
+            testfile = list(valid_paths)[0]
+            if all(path_compare(testfile, p) for p in valid_paths):
+                valid_paths = set().add(testfile)
+            else:
+                error_msg = (
+                    'Data has been moved, and the file path could not be '
+                    'unambiguously determined from the options below:\n'
+                    '%s'
+                    'Enter the selected path and press ENTER: ') % \
+                    ''.join('  ' + p + '\n' for p in paths)
+        if len(valid_paths) is not 1:
+            while True:
+                input_path = input(error_msg)
+                if isfile(input_path):
+                    valid_paths = [input_path]
+                    break
+                else:
+                    error_msg = ('Invalid path. Type a new path to the data'
+                                 'and press ENTER: ')
+        d['path'] = valid_paths.pop()

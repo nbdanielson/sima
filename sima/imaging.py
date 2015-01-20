@@ -16,7 +16,7 @@ try:
 except ImportError:
     h5py_available = False
 else:
-    h5py_available = StrictVersion(h5py.__version__) >= StrictVersion('2.3.1')
+    h5py_available = StrictVersion(h5py.__version__) >= StrictVersion('2.2.1')
 
 import sima
 import sima.misc
@@ -254,7 +254,9 @@ class ImagingDataset(object):
         """Load a saved ImagingDataset object."""
         try:
             return cls(None, path)
-        except (ImportError, KeyError):
+        except ImportError as error:
+            if not error.args[0] == 'No module named iterables':
+                raise error
             from sima.misc.convert import _load_version0
             # Load a read-only copy of the converted dataset
             ds = _load_version0(path)
@@ -659,7 +661,7 @@ class ImagingDataset(object):
         Parameters
         ----------
         method : sima.segment.SegmentationStrategy
-            The method for segmentation. Defaults to normcut.
+            The method for segmentation.
         label : str, optional
             Label to be associated with the segmented set of ROIs.
         planes : list of int

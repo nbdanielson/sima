@@ -67,7 +67,7 @@ class ImagingDataset(object):
 
     Parameters
     ----------
-    sequences : list of sima.???.Sequence
+    sequences : list of sima.Sequence
         Imaging sequences that can each be iterated over to yield
         the imaging data from each acquistion time.
     savedir : str
@@ -76,17 +76,6 @@ class ImagingDataset(object):
         be appended.
     channel_names : list of str, optional
         Names for the channels. Defaults to ['0', '1', '2', ...].
-    info : dict
-        Data for the order and timing of the data acquisition.
-        See Notes for details. *** combine channel names here? ***
-
-    Notes
-    -----
-    Keys for info:
-        'acquisition period' :\n
-        'plane order' :\n
-        'plane times' :\n
-        'plane heights' :\n
 
     Attributes
     ----------
@@ -104,11 +93,10 @@ class ImagingDataset(object):
 
     """
 
-    def __init__(self, sequences, savedir, channel_names=None, info=None,
+    def __init__(self, sequences, savedir, channel_names=None,
                  read_only=False):
 
         self._read_only = read_only
-        self.info = {} if info is None else info
         if sequences is None:
             # Special case used to load an existing ImagingDataset
             if not savedir:
@@ -130,7 +118,7 @@ class ImagingDataset(object):
                 self.num_frames = data.pop('num_frames')
             except KeyError:
                 self.num_frames = sum(len(c) for c in self)
-        else:
+        elif all(isinstance(s, sima.Sequence) for s in sequences):
             self.savedir = savedir
             self.sequences = sequences
             self.frame_shape = self.sequences[0].shape[1:]
@@ -141,6 +129,9 @@ class ImagingDataset(object):
                     str(x) for x in range(self.frame_shape[-1])]
             else:
                 self.channel_names = channel_names
+        else:
+            raise TypeError('ImagingDataset objects must be initialized '
+                            'with a list of sequences.')
         # initialize sequences
         self.num_sequences = len(self.sequences)
         if not np.all([sequence.shape[1:] == self.sequences[0].shape[1:]
@@ -151,15 +142,16 @@ class ImagingDataset(object):
 
     def __getitem__(self, indices):
         if isinstance(indices, int):
-            return ImagingDataset([self.sequences[indices]], None,
-                                  info=self.info)
+            return ImagingDataset([self.sequences[indices]], None)
         indices = list(indices)
         seq_indices = indices.pop(0)
         if isinstance(seq_indices, int):
             seq_indices = slice(seq_indices, seq_indices + 1)
         sequences = [seq[tuple(indices)] for seq in self.sequences][
             seq_indices]
-        return ImagingDataset(sequences, None, channel_names = self.channel_names, info=self.info)
+
+        return ImagingDataset(
+            sequences, None, channel_names=self.channel_names)
 
     @property
     def channel_names(self):
@@ -200,7 +192,7 @@ class ImagingDataset(object):
                     if overwrite:
                         self._savedir = savedir
                     else:
-                        return
+                        self._savedir = None
             else:
                 self._savedir = savedir
             if orig_dir:
@@ -359,7 +351,7 @@ class ImagingDataset(object):
                 transforms = [estimate_array_transform(s, t, method=method)
                               for s, t in it.izip(source, target)]
             except ValueError:
-                print 'Auto transform not implemented for this method'
+                print('Auto transform not implemented for this method')
                 return
         else:
             # Assume one ROI per plane
@@ -456,7 +448,7 @@ class ImagingDataset(object):
         filenames : str or list of str
             A single (.h5) output filename, or a list of (.tif) output
             filenames with one per channel.
-        fmt : {'TIFF8', 'TIFF16'}, optional
+        fmt : {'TIFF8', 'TIFF16', 'HDF5'}, optional
             The format of the output files. Defaults to 16-bit TIFF.
         scale_values : bool, optional
             Whether to scale the values to use the full range of the
@@ -469,32 +461,44 @@ class ImagingDataset(object):
         elif not len(filenames) == self.frame_shape[-1]:
             raise ValueError(
                 "The number of filenames must equal the number of channels.")
-        for chan, filename in enumerate(filenames):
-            im = self.time_averages[:, :, :, chan]
-            if dirname(filename):
-                mkdir_p(dirname(filename))
-            if fmt is 'TIFF8':
-                if scale_values:
-                    out = sima.misc.to8bit(im)
-                else:
-                    out = im.astype('uint8')
-            elif fmt is 'TIFF16':
-                if scale_values:
-                    out = sima.misc.to16bit(im)
-                else:
-                    out = im.astype('uint16')
+        if fmt == 'HDF5':
+            if not h5py_available:
+                raise ImportError('h5py >= 2.2.1 required')
+            f = h5py.File(filenames, 'w')
+            im = self.time_averages
+            if scale_values:
+                im = sima.misc.to16bit(im)
             else:
-                raise ValueError('Unrecognized format.')
-            imsave(filename, out)
+                im = im.astype('uint16')
+            f.create_dataset(name='time_average', data=im)
+            for idx, label in enumerate(['z', 'y', 'x', 'c']):
+                f['time_average'].dims[idx].label = label
+            if self.channel_names is not None:
+                f['time_average'].attrs['channel_names'] = np.array(
+                    self.channel_names)
+            f.close()
+        else:
+            for chan, filename in enumerate(filenames):
+                im = self.time_averages[:, :, :, chan]
+                if dirname(filename):
+                    mkdir_p(dirname(filename))
+                if fmt is 'TIFF8':
+                    if scale_values:
+                        out = sima.misc.to8bit(im)
+                    else:
+                        out = im.astype('uint8')
+                elif fmt is 'TIFF16':
+                    if scale_values:
+                        out = sima.misc.to16bit(im)
+                    else:
+                        out = im.astype('uint16')
+                else:
+                    raise ValueError('Unrecognized format.')
+                imsave(filename, out)
 
     def export_frames(self, filenames, fmt='TIFF16', fill_gaps=True,
                       scale_values=False):
-        """Save a multi-page TIFF files of the motion-corrected time series.
-
-        # TODO: HDF5, multiple Z planes
-        One TIFF file is created for each sequence and channel.
-        The TIFF files have the same name as the uncorrected files, but should
-        be saved in a different directory.
+        """Export imaging data from the dataset.
 
         Parameters
         ----------
@@ -559,7 +563,7 @@ class ImagingDataset(object):
                     writer.writerow([sequence_idx, frame_idx] + frame.tolist())
 
     def extract(self, rois=None, signal_channel=0, label=None,
-                remove_overlap=True, n_processes=None, demix_channel=None,
+                remove_overlap=True, n_processes=1, demix_channel=None,
                 save_summary=True):
         """Extracts imaging data from the current dataset using the
         supplied ROIs file.
@@ -579,7 +583,7 @@ class ImagingDataset(object):
         n_processes : int, optional
             Number of processes to farm out the extraction across. Should be
             at least 1 and at most one less then the number of CPUs in the
-            computer. If None, uses half the CPUs.
+            computer. Defaults to 1.
         demix_channel : string or int, optional
             Channel to demix from the signal channel, either an integer index
             or a name in self.channel_names If None, do not demix signals.
@@ -655,13 +659,13 @@ class ImagingDataset(object):
         with open(join(savedir, 'dataset.pkl'), 'wb') as f:
             pickle.dump(self._todict(savedir), f, pickle.HIGHEST_PROTOCOL)
 
-    def segment(self, method, label=None, planes=None):
+    def segment(self, strategy, label=None, planes=None):
         """Segment an ImagingDataset to generate ROIs.
 
         Parameters
         ----------
-        method : sima.segment.SegmentationStrategy
-            The method for segmentation.
+        strategy : sima.segment.SegmentationStrategy
+            The strategy for segmentation.
         label : str, optional
             Label to be associated with the segmented set of ROIs.
         planes : list of int
@@ -672,7 +676,7 @@ class ImagingDataset(object):
         ROIs : sima.ROI.ROIList
             The segmented regions of interest.
         """
-        rois = method.segment(self)
+        rois = strategy.segment(self)
         if self.savedir is not None:
             rois.save(join(self.savedir, 'rois.pkl'), label)
         return rois
@@ -699,11 +703,11 @@ class ImagingDataset(object):
         return '<ImagingDataset>'
 
     def __repr__(self):
-        return ('<ImagingDataset: ' + 'num_sequences={n_sequences}, ' +
-                'frame_shape={fsize}, num_frames={frames}>').format(
-            n_sequences=self.num_sequences,
-            fsize=self.frame_shape,
-            frames=self.num_frames)
+        return (
+            '<ImagingDataset: ' + 'num_sequences={n_sequences}, ' +
+            'frame_shape={fsize}, num_frames={frames}>'
+        ).format(n_sequences=self.num_sequences,
+                 fsize=self.frame_shape, frames=self.num_frames)
 
     def __iter__(self):
         return self.sequences.__iter__()

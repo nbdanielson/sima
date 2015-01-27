@@ -312,7 +312,7 @@ class Struct:
 class _HiddenMarkov(MotionEstimationStrategy):
 
     def __init__(self, granularity=2, num_states_retained=50,
-                 max_displacement=None, n_processes=None, verbose=True):
+                 max_displacement=None, n_processes=1, verbose=True):
         if isinstance(granularity, int) or isinstance(granularity, str):
             granularity = (granularity, 1)
         elif not isinstance(granularity, tuple):
@@ -431,12 +431,25 @@ class HiddenMarkov2D(_HiddenMarkov):
 
     Parameters
     ----------
+    granularity : int, str, or tuple, optional
+        The granularity of the calculated displacements. A separate
+        displacement can be calculated for each frame (granularity=0
+        or granularity='frame'), each plane (1 or 'plane'), each
+        row (2 or 'row'), or pixel (3 or 'column'). As well, a seperate
+        displacement can be calculated for every n consecutive elements
+        (e.g.\ granularity=('row', 8) for every 8 rows).
+        Defaults to one displacement per row.
     num_states_retained : int, optional
         Number of states to retain at each time step of the HMM.
         Defaults to 50.
     max_displacement : array of int, optional
         The maximum allowed displacement magnitudes in [y,x]. By
         default, arbitrarily large displacements are allowed.
+    n_processes : int, optional
+        Number of pool processes to spawn to parallelize frame alignment.
+        Defaults to 1.
+    verbose : bool, optional
+        Whether to print information about progress.
 
     References
     ----------
@@ -769,6 +782,9 @@ class HiddenMarkov3D(_HiddenMarkov):
     max_displacement : array of int, optional
         The maximum allowed displacement magnitudes in [y,x]. By
         default, arbitrarily large displacements are allowed.
+    n_processes : int, optional
+        Number of pool processes to spawn to parallelize frame alignment.
+        Defaults to 1.
 
     References
     ----------

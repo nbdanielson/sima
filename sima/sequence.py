@@ -79,8 +79,8 @@ class Sequence(object):
     >>> path = example_hdf5()
     >>> seq = Sequence.create('HDF5', path, 'yxt')
 
-    For numpy 1.9 or higher, Sequences are array like, and can be converted to
-    numpy arrays or passed as arguments into numpy functions that take arrays.
+    Sequences are array like, and can be converted to numpy arrays or passed as
+    arguments into numpy functions that take arrays.
 
     >>> import numpy as np
     >>> arr = np.array(seq)
@@ -103,20 +103,43 @@ class Sequence(object):
     """
     __metaclass__ = ABCMeta
 
+    def __new__(cls, *args, **kwargs):
+        try:
+            return super(Sequence, cls).__new__(cls)
+        except TypeError as err:
+            if err.args[0] == 'object() takes no parameters':
+                raise Exception('Sequences must be created using the '
+                                'Sequence.create() method')
+            else:
+                raise err
+
     def __getitem__(self, indices):
         """Create a new Sequence by slicing this Sequence."""
         return _IndexedSequence(self, indices)
 
-    @abstractmethod
     def __iter__(self):
         """Iterate over the frames of the Sequence.
 
         The yielded structures are numpy arrays of the shape (num_planes,
         num_rows, num_columns, num_channels).
         """
-        raise NotImplementedError
+        for t in xrange(len(self)):
+            yield self._get_frame(t)
 
-    def _get_frame(self, t):
+    @abstractmethod
+    def _get_frame(self, n):
+        """Get the nth frame.
+
+        Parameters
+        ----------
+        n : int
+            The index of the frame being accessed.
+
+        Returns
+        -------
+        frame : np.ndarray
+            The desired frame of image data.
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -205,9 +228,9 @@ class Sequence(object):
         >>> path = example_hdf5()
         >>> seq = Sequence.create('HDF5', path, 'yxt')
         >>> joined = Sequence.join(seq, seq)
-        >>> joined.shape[:4] == seq.shape[:4]
+        >>> joined.shape[4] == 2 * seq.shape[4]  # twice as many channels
         True
-        >>> joined.shape[4] == 2 * seq.shape[4]
+        >>> joined.shape[:4] == seq.shape[:4]  # the frame shape is unchanged
         True
 
         """
@@ -221,8 +244,10 @@ class Sequence(object):
         ----------
         fmt : {'HDF5', 'TIFF', 'TIFFs', 'ndarray'}
             The format of the data used to create the Sequence.
-        *args, **kwargs
-            Additional arguments depending on the data format.
+        *args
+        **kwargs
+            Additional arguments depending on the data format. See
+            Notes below.
 
         Notes
         -----
@@ -319,14 +344,27 @@ class Sequence(object):
         else:
             raise ValueError('Unrecognized format')
 
+    def __array__(self):
+        """Used to convert the Sequence to a numpy array.
+
+        >>> import sima
+        >>> import numpy as np
+        >>> data = np.ones((10, 3, 16, 16, 2))
+        >>> seq = sima.Sequence.create('ndarray', data)
+        >>> np.all(data == np.array(seq))
+        True
+
+        """
+        return np.concatenate([np.expand_dims(frame, 0) for frame in self])
+
     def export(self, filenames, fmt='TIFF16', fill_gaps=False,
                channel_names=None):
         """Save frames to the indicated filenames.
 
         This function stores a multipage tiff file for each channel.
 
-        Paramters
-        ---------
+        Parameters
+        ----------
         filenames : str or list of list str
             The names of the output files. For HDF5 files, this must be a
             single string. For TIFF formats, this should be a list of list
@@ -361,7 +399,7 @@ class Sequence(object):
                             for plane in filenames]
         elif fmt == 'HDF5':
             if not h5py_available:
-                raise ImportError('h5py >= 2.3.1 required')
+                raise ImportError('h5py >= 2.2.1 required')
             f = h5py.File(filenames, 'w')
             output_array = np.empty(self.shape, dtype='uint16')
             # TODO: change dtype?
@@ -426,6 +464,26 @@ class _Sequence_TIFF_Interleaved(Sequence):
                         axis=2), 0)
                  for _ in range(self._num_planes)], 0)
 
+    def _get_frame(self, n):
+        images = Image.open(self._path, 'r')
+
+        def _get_im(n, p, c):
+            """Get the image corresponding to time n, plane p, channel c"""
+            images.seek(n * self._num_planes * self._num_channels +
+                        p * self._num_channels + c)
+            return np.array(images).astype(float)
+
+        images.seek(n * self._num_planes * self._num_channels)
+        frame = np.concatenate(
+            [np.expand_dims(
+                np.concatenate(
+                    [np.expand_dims(_get_im(n, p, c), 2)
+                     for c in range(self._num_channels)],
+                    axis=2), 0)
+             for p in range(self._num_planes)], 0)
+        images.close()
+        return frame
+
     def _iter_pages(self):
         idx = 0
         images = Image.open(self._path, 'r')
@@ -457,22 +515,7 @@ class _Sequence_TIFF_Interleaved(Sequence):
         return self._len
 
 
-class _IndexableSequence(Sequence):
-
-    """Iterable whose underlying structure supports indexing."""
-    __metaclass__ = ABCMeta
-
-    def __iter__(self):
-        for t in xrange(len(self)):
-            yield self._get_frame(t)
-
-    # @abstractmethod
-    # def _get_frame(self, t):
-    #     """Return frame with index t."""
-    #     pass
-
-
-class _Sequence_TIFFs(_IndexableSequence):  # TODO: make indexable
+class _Sequence_TIFFs(Sequence):
     """
 
     Parameters
@@ -526,7 +569,7 @@ class _Sequence_TIFFs(_IndexableSequence):  # TODO: make indexable
         return {'__class__': self.__class__, 'paths': self._paths}
 
 
-class _Sequence_ndarray(_IndexableSequence):
+class _Sequence_ndarray(Sequence):
     def __init__(self, array):
         self._array = array
 
@@ -540,7 +583,7 @@ class _Sequence_ndarray(_IndexableSequence):
         return {'__class__': self.__class__, 'array': self._array}
 
 
-class _Sequence_HDF5(_IndexableSequence):
+class _Sequence_HDF5(Sequence):
 
     """
     Iterable for an HDF5 file containing imaging data.
@@ -550,7 +593,7 @@ class _Sequence_HDF5(_IndexableSequence):
 
     def __init__(self, path, dim_order, group=None, key=None):
         if not h5py_available:
-            raise ImportError('h5py >= 2.3.1 required')
+            raise ImportError('h5py >= 2.2.1 required')
         self._path = abspath(path)
         self._file = h5py.File(path, 'r')
         if group is None:
@@ -708,7 +751,6 @@ class _MotionCorrectedSequence(_WrapperSequence):
         Shape: (num_frames, num_planes, num_rows, 2).
 
     This object has the same attributes and methods as the class it wraps."""
-    # TODO: check clipping and output frame size
 
     def __init__(self, base, displacements, extent=None):
         super(_MotionCorrectedSequence, self).__init__(base)

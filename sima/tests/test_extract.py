@@ -84,7 +84,7 @@ class Test_ConstantData(object):
             [sima.ROI.ROI(polygons=polygon, im_shape=(2, 6, 8)),
              sima.ROI.ROI(mask=mask)])
         no_overlap_signals = self.dataset.extract(
-            rois=rois, signal_channel=1, remove_overlap=True, n_processes=2,
+            rois=rois, signal_channel=1, remove_overlap=True, n_processes=1,
             demix_channel=None)
         overlap_signals = self.dataset.extract(
             rois=rois, signal_channel=1, remove_overlap=False, n_processes=2,
@@ -127,7 +127,7 @@ class Test_VaryingData(object):
         roi = sima.ROI.ROI(mask=mask)
         rois = sima.ROI.ROIList([roi])
         signals = self.dataset.extract(
-            rois=rois, signal_channel=0, remove_overlap=True, n_processes=2,
+            rois=rois, signal_channel=0, remove_overlap=True, n_processes=1,
             demix_channel=None)
 
         assert_array_equal(signals['raw'], 1.)
@@ -167,7 +167,7 @@ class Test_VaryingData(object):
             [sima.ROI.ROI(polygons=polygon, im_shape=(2, 6, 8)),
              sima.ROI.ROI(mask=mask)])
         no_overlap_signals = self.dataset.extract(
-            rois=rois, signal_channel=0, remove_overlap=True, n_processes=2,
+            rois=rois, signal_channel=0, remove_overlap=True, n_processes=1,
             demix_channel=None)
         overlap_signals = self.dataset.extract(
             rois=rois, signal_channel=0, remove_overlap=False, n_processes=2,
@@ -200,21 +200,25 @@ class Test_VaryingData(object):
             overlap_signals['raw'][0][1], roi2_expected_overlap)
 
 
-class Test_MissingData(object):
-    def setup(self):
-        return
+# class Test_MissingData(object):
+#     def setup(self):
+#         return
 
-    def test_empty_roi(self):
-        return
+#     @dec.knownfailureif(True)
+#     def test_empty_roi(self):
+#         raise NotImplemented
 
-    def test_missing_frame(self):
-        return
+#     @dec.knownfailureif(True)
+#     def test_missing_frame(self):
+#         raise NotImplemented
 
-    def test_partial_missing_data(self):
-        return
+#     @dec.knownfailureif(True)
+#     def test_partial_missing_data(self):
+#         raise NotImplemented
 
-    def test_partial_missing_data_overlapping_rois(self):
-        return
+#     @dec.knownfailureif(True)
+#     def test_partial_missing_data_overlapping_rois(self):
+#         raise NotImplemented
 
 if __name__ == "__main__":
     run_module_suite()

@@ -25,8 +25,8 @@ extensions = [
         include_dirs=[numpy.get_include()],
     ),
     Extension(
-        'sima._opca',
-        sources=['sima/_opca.%s' % ('pyx' if USE_CYTHON else 'c')],
+        'sima.segment._opca',
+        sources=['sima/segment/_opca.%s' % ('pyx' if USE_CYTHON else 'c')],
         include_dirs=[numpy.get_include()],
     )
 ]
@@ -49,20 +49,23 @@ Topic :: Scientific/Engineering
 setup(
     name="sima",
     version="1.0.0-dev",
-    packages=['sima', 'sima.misc', 'sima.motion', 'sima.motion.tests'],
+    packages=['sima',
+              'sima.misc',
+              'sima.motion',
+              'sima.motion.tests',
+              'sima.segment',
+              'sima.segment.tests',
+              ],
     #   scripts = [''],
     #
     # Project uses reStructuredText, so ensure that the docutils get
     # installed or upgraded on the target machine
     install_requires=[
-        'numpy>=1.9',
+        'numpy>=1.8',
         'scipy>=0.13.0',
-        'matplotlib>=1.2.1',
         'scikit-image>=0.9.3',
         'shapely>=1.2.14',
         'scikit-learn>=0.11',
-        'h5py>=2.3.0',
-        'bottleneck>=0.8',
         'pillow>=2.6.1',
     ],
     package_data={

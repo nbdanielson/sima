@@ -4,7 +4,8 @@ import os
 from datetime import datetime
 import cPickle as pickle
 import itertools as it
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
+import warnings
 
 import numpy as np
 from scipy.sparse import hstack, vstack, diags, csc_matrix
@@ -254,7 +255,7 @@ def _remove_pixels(masks, pixels_to_remove):
 
 
 def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
-                 n_processes=None, demix_channel=None):
+                 n_processes=1, demix_channel=None):
     """Extracts imaging data from the current dataset using the
     supplied ROIs file.
 
@@ -271,7 +272,7 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
     n_processes : int, optional
         Number of processes to farm out the extraction across. Should be
         at least 1 and at most one less then the number of CPUs in the
-        computer. If None, uses half the CPUs.
+        computer. Defaults to 1.
     demix_channel : int, optional
         Index of channel to demix from the signal channel. If None, do not
         demix signals.
@@ -289,13 +290,8 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
 
     """
 
-    # Determine pool parameters
-    if n_processes is None:
-        n_pools = cpu_count() / 2
-    else:
-        n_pools = n_processes
-
-    pool = Pool(processes=n_pools)
+    if n_processes > 1:
+        pool = Pool(processes=n_processes)
 
     num_sequences = dataset.num_sequences
     num_planes, num_rows, num_columns, num_channels = dataset.frame_shape
@@ -315,7 +311,7 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
     # If mask is boolean convert to float and normalize values such that
     # the sum of the weights in each ROI is 1
     for mask_idx, mask in it.izip(it.count(), masks):
-        if mask.dtype == bool:
+        if mask.dtype == bool and mask.nnz:
             masks[mask_idx] = mask.astype('float') / mask.nnz
 
     # Identify non-empty ROIs
@@ -323,6 +319,9 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
     rois_to_include = np.array(
         [idx for idx, mask in enumerate(masks) if mask.nnz > 0])
     n_rois = len(rois_to_include)
+    if n_rois != original_n_rois:
+        warnings.warn("Empty ROIs will return all NaN values: "
+                      + "{} empty ROIs found".format(original_n_rois - n_rois))
 
     # Stack masks to a 2-d array
     mask_stack = vstack([masks[idx] for idx in rois_to_include]).tocsc()
@@ -375,12 +374,12 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
         constants['is_overlap'] = len(overlap[0]) > 0 and not remove_overlap
 
         # Determine chunksize and limit to prevent pools from hanging
-        chunksize = min(1 + len(sequence) / n_pools, 200)
+        chunksize = min(1 + len(sequence) / n_processes, 200)
 
-        # This will farm out signal extraction across 'n_pools' CPUs
+        # This will farm out signal extraction across 'n_processes' CPUs
         # The actual extraction is in _roi_extract, it's a separate
         # top-level function due to Pool constraints.
-        if n_pools > 1:
+        if n_processes > 1:
             map_generator = pool.imap_unordered(_roi_extract, it.izip(
                 _data_chunker(
                     iter(sequence), dataset.time_averages, signal_channel),
@@ -407,8 +406,9 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             demix[np.isinf(demix)] = np.nan
             demixed_signal[cycle_idx] = demix
 
-    pool.close()
-    pool.join()
+    if n_processes > 1:
+        pool.close()
+        pool.join()
 
     def put_back_nan_rois(signals, included_rois, n_rois):
         """Put NaN rows back in the signals file for ROIs that were never
@@ -493,7 +493,11 @@ def save_extracted_signals(dataset, rois, save_path=None, label=None,
                            signal_channel=signal_channel, **kwargs)
 
     if save_summary:
-        _save_extract_summary(signals, save_path, rois)
+        try:
+            _save_extract_summary(signals, save_path, rois)
+        except ImportError:
+            warnings.warn('Failed to import matplotlib. No extraction '
+                          'summary could be saved.')
 
     signals.pop('_masks')
 

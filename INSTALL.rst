@@ -14,7 +14,7 @@ On Windows, we recommend using a scientific python distribution for installing
 the various prerequisites. Recommended distributions are:
 
 * `Python(x,y) <http://code.google.com/p/pythonxy/>`_
-* `WinPython <http://code.google.com/p/winpython/>`_
+* `WinPython <http://winpython.sourceforge.net/>`_
 * `Anaconda <https://store.continuum.io/cshop/anaconda>`_
 
 For Mac OS X, we recommend installing the prerequisites, especially OpenCV,
@@ -23,8 +23,9 @@ using a package manager, such as `MacPorts <http://www.macports.org>`_.
 Prerequisites
 =============
 
-SIMA depends on various freely available, open source software that must be
-installed prior to using SIMA:
+SIMA depends on various freely available, open source software. Whenever
+possible, we recommend installing these dependencies with your operating
+system's or Python distribution's package manager prior to installing SIMA.
 
 * `Python <http://python.org>`_ 2.7 
 * `numpy <http://www.scipy.org>`_ >= 1.6.2
@@ -67,9 +68,16 @@ download the source, you can install the package with setuptools::
 
 Windows
 -------
-On Windows, you can simply execute the Windows installer that can be downloaded
-from https://pypi.python.org/pypi/sima.  If you run Windows Vista or Windows 7,
-you may need to right-click on the installer and select "Run as Administrator".
+The SIMA package can be installed from the python package index::
+
+    $ pip install sima
+
+Alternatively, the packaged wheel is available at
+<https://pypi.python.org/pypi/sima> to be installed with your Python
+distribution's package manager.
+
+NOTE: You may need to install shapely separately from the package at:
+<http://www.lfd.uci.edu/~gohlke/pythonlibs/#shapely>
 
 If building SIMA from source or using pip or easy_install on Windows, you may
 also need to follow these `instructions for compiling the Cython extensions
@@ -88,7 +96,7 @@ Next, download and install MacPorts. Then run the following command in terminal 
 install SIMA and its dependencies::
 
     $ sudo port selfupdate
-    $ sudo port install python27 py27-numpy py27-scipy py27-matplotlib py27-shapely py27-pip py27-h5py opencv +python27
+    $ sudo port install python27 py27-numpy py27-scipy py27-scikit-image py27-scikit-learn py27-shapely py27-Pillow py27-matplotlib py27-bottleneck py27-pip py27-h5py opencv +python27
     $ sudo port select --set python python27
     $ sudo port select --set pip pip27
     $ pip install sima --user

@@ -14,7 +14,7 @@ imSet = ImagingDataset.load(TEST_DIR)
 raw_signals = imSet.signals(channel=CHANNEL)[LABEL]['raw']
 
 subtracted_signals = subtract_neuropil(
-    imSet, CHANNEL, LABEL, min_distance=0, grid_dim=(3, 3),
-    contamination_ratio = 1)
+    imSet, imSet._resolve_channel(CHANNEL), LABEL, min_distance=5,
+    grid_dim=(3, 3), contamination_ratio = 1)
 
 set_trace()

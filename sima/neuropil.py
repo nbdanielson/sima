@@ -31,7 +31,7 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
     signals = imset.signals(channel=channel)
     raw_signals = signals[label]['raw']
     rois = ROIList(signals[label]['rois'])
-    mean_frame = np.squeeze(signals[label]['mean_frame'])
+    # mean_frame = np.squeeze(signals[label]['mean_frame'])
     # OK
     # Initialize mask (all True).  shape is zyx
     nonROI_mask = []  # one level for each z-plane
@@ -41,15 +41,19 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
     # OK
     # Create the non-ROI mask
     neuropil_rois = []
-    mean_neuropil_levels = np.zeros(grid_dim)
-    mean_roi_levels = []
+    # mean_neuropil_levels = np.zeros(grid_dim)
+    # mean_roi_levels = []
     all_roi_mask = []
+
+    assert len(rois[0].mask) == 1
+
+    # TODO: Below is incorrect for multi-plane datasets and will fail!
     for plane in xrange(len(rois[0].mask)):
         for roi in rois:
             roi_mask = np.array(roi.mask[plane].todense())
             all_roi_mask.append(roi_mask)
-            mean_roi_levels.append(
-                np.sum(roi_mask * mean_frame) / np.sum(roi_mask))
+            # mean_roi_levels.append(
+            #     np.sum(roi_mask * mean_frame) / np.sum(roi_mask))
         all_roi_mask = sum(all_roi_mask)
         all_roi_mask = all_roi_mask.astype(bool)
         dilated_mask = ndimage.binary_dilation(
@@ -69,9 +73,10 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
                            y_bounds[j] + 1:y_bounds[j + 1]] = 1
                 neuropil_mask = (grid[i][j] * nonROI_mask[plane]).astype(bool)
                 neuropil_rois.append(ROI(mask=neuropil_mask))
-                mean_neuropil_levels[i, j] = np.sum(
-                    neuropil_mask * mean_frame) / np.sum(neuropil_mask)
+                # mean_neuropil_levels[i, j] = np.sum(
+                #     neuropil_mask * mean_frame) / np.sum(neuropil_mask)
         neuropil_rois = ROIList(neuropil_rois)
+
     # Calculate neuropil timecourse
     neuropil_extracted = extract_rois(
         imset, neuropil_rois, channel, remove_overlap=True)
@@ -91,7 +96,7 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
     # Calculate centroid of neuropil ROIs
     neuropil_centroids = [[((x_bounds[i] + x_bounds[i + 1]) / 2.0,
                             (y_bounds[j] + y_bounds[j + 1]) / 2.0)
-                           for j in xrange(len(y_bounds) - 1)]
+                          for j in xrange(len(y_bounds) - 1)]
                           for i in xrange(len(x_bounds) - 1)]
 
     neuropil_centroids = np.array(neuropil_centroids)
@@ -100,12 +105,14 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
         roi_centroid = np.array(roi.polygons.centroid.coords)[0]
         roi_centroids.append(roi_centroid)
 
+    set_trace()
+
     # Calculate correction factors
     for seq_idx in xrange(len(raw_signals)):
         sequence_signals = []
         set_trace()
-        for raw_timecourse, mean, roi_centroid in it.izip(
-                raw_signals[seq_idx], mean_roi_levels, roi_centroids):
+        for raw_timecourse, roi_centroid in it.izip(
+                raw_signals[seq_idx], roi_centroids):
             distances = np.zeros(grid_dim)
             for i in xrange(grid_dim[0]):
                 for j in xrange(grid_dim[1]):
@@ -113,7 +120,7 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
                         roi_centroid, neuropil_centroids[i, j])
             raw_weights = 1.0 / (1 + distances ** 2)
             weights = raw_weights / sum(raw_weights)
-            weights *= mean_neuropil_levels
+            # weights *= mean_neuropil_levels
             correction = np.array(neuropil_smoothed[seq_idx]).reshape(
                 grid_dim + (len(neuropil_smoothed[seq_idx][0, :]),), order='F')
             weighted_correction = map(
@@ -122,8 +129,8 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
             correction_factors = np.array(
                 [np.sum(weighted_correction[i])
                  for i in xrange(len(neuropil_smoothed[seq_idx][0, :]))])
-            corrected_timecourse = (
-                mean * raw_timecourse - contamination_ratio * correction_factors)
-            corrected_timecourse /= np.nanmean(corrected_timecourse)
+            corrected_timecourse = raw_timecourse - correction_factors + \
+                np.nanmean(correction_factors)
             corrected_timecourses.append(corrected_timecourse)
-    return corrected_timecourses
+        sequence_signals.append(corrected_timecourses)
+    return sequence_signals

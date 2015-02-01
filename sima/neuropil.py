@@ -126,7 +126,7 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
                     distances[i, j] = dist(
                         roi_centroid, neuropil_centroids[i, j])
             raw_weights = 1.0 / (1 + distances ** 2)
-            weights = raw_weights / sum(raw_weights)
+            weights = raw_weights / raw_weights.sum()
             # weights *= mean_neuropil_levels
             correction = np.array(neuropil_smoothed[seq_idx]).reshape(
                 grid_dim + (len(neuropil_smoothed[seq_idx][0, :]),), order='F')

@@ -105,7 +105,7 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
     #     roi_centroid = np.array(roi.polygons.centroid.coords)[0]
     #     roi_centroids.append(roi_centroid)
 
-    f = np.load('/Users/Nathan/Desktop/neuropil_vars.npz')
+    f = np.load('/home/nathan/neuropil_vars.npz')
     raw_signals = f['raw_signals']
     roi_centroids = f['roi_centroids']
     neuropil_signals = f['neuropil_signals']

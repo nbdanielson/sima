@@ -139,8 +139,8 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
             correction_factors = np.array(
                 [np.sum(weighted_correction[i])
                  for i in xrange(len(neuropil_smoothed[seq_idx][0, :]))])
-            corrected_timecourse = raw_timecourse - correction_factors + \
-                np.nanmean(correction_factors)
+            corrected_timecourse = raw_timecourse - (correction_factors / \
+                np.nanmean(correction_factors) - 1)
             sequence_signals.append(corrected_timecourse)
         sequence_signals.append(np.array(corrected_signals))
     return sequence_signals

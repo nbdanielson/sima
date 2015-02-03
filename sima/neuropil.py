@@ -32,13 +32,11 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
     # raw_signals = signals[label]['raw']
     # rois = ROIList(signals[label]['rois'])
     # # mean_frame = np.squeeze(signals[label]['mean_frame'])
-    # # OK
     # # Initialize mask (all True).  shape is zyx
     # nonROI_mask = []  # one level for each z-plane
     # for plane in xrange(len(rois[0].mask)):
     #     nonROI_mask.append(np.ones(rois[0].mask[plane].todense().shape))
     # nonROI_mask = np.array(nonROI_mask)
-    # # OK
     # # Create the non-ROI mask
     # neuropil_rois = []
     # # mean_neuropil_levels = np.zeros(grid_dim)
@@ -136,9 +134,8 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
 
             # TODO: SOMETHING IS NOT CALCULATING RIGHT -- CORRECTION_FACTORS IS
             # CENTERED ABOUT 3 (INSTEAD OF 1)
-            correction_factors = np.array(
-                [np.sum(weighted_correction[i])
-                 for i in xrange(len(neuropil_smoothed[seq_idx][0, :]))])
+            correction_factors = np.array([correction_frame.sum() \
+                    for correction_frame in weighted_correction])
             corrected_timecourse = raw_timecourse - (correction_factors / \
                 np.nanmean(correction_factors) - 1)
             sequence_signals.append(corrected_timecourse)

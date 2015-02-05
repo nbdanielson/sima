@@ -1038,12 +1038,13 @@ class _IndexedSequence(_WrapperSequence):
                 return super(_IndexedSequence, cls)._from_dict(d, savedir)
 
         disps = d['base']['displacements']
-        max_y = np.max(disps[:, :, :, 0])
-        max_x = np.max(disps[:, :, :, 1])
         min_y = np.min(disps[:, :, :, 0])
         min_x = np.min(disps[:, :, :, 1])
-        y_width = d['base']['extent'][1] - (max_y - min_y)
-        x_width = d['base']['extent'][2] - (max_x - min_x)
+
+        base_base_dict = d['base']['base'].copy()
+        b = base_base_dict.pop('__class__')._from_dict(base_base_dict, savedir)
+        width_y = b.shape[2]
+        width_x = b.shape[3]
 
         d['base']['displacements'][:, :, :, 0] -= min_y
         d['base']['displacements'][:, :, :, 1] -= min_x
@@ -1061,17 +1062,17 @@ class _IndexedSequence(_WrapperSequence):
         max_x = np.max(d['base']['displacements'][:, :, :, 1])
 
         d['base']['extent'] = (
-            d['base']['extent'][0], y_width + max_y, x_width + max_x)
+            d['base']['extent'][0], width_y + max_y, width_x + max_x)
 
         return super(_IndexedSequence, cls)._from_dict(d, savedir)
 
-    def __dir__(self):
-        """Customize how attributes are reported, e.g. for tab completion.
+    # def __dir__(self):
+    #     """Customize how attributes are reported, e.g. for tab completion.
 
-        This may not be necessary if we inherit an abstract class"""
-        heritage = dir(super(self.__class__, self)) # inherited attributes
-        return sorted(heritage + self.__class__.__dict__.keys() +
-                      self.__dict__.keys())
+    #     This may not be necessary if we inherit an abstract class"""
+    #     heritage = dir(super(self.__class__, self)) # inherited attributes
+    #     return sorted(heritage + self.__class__.__dict__.keys() +
+    #                   self.__dict__.keys())
 
 
 def _fill_gaps(frame_iter1, frame_iter2):

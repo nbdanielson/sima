@@ -25,7 +25,7 @@ from sima.extract import extract_rois
 from pudb import set_trace
 
 
-def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
+def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid_dim=(3, 3),
                       contamination_ratio = 1):
      set_trace()
      # pulling out the raw imaging signals (one t-series per sequence per ROI)
@@ -85,8 +85,8 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
      for seq_idx in xrange(len(neuropil_signals)):
          df = pd.DataFrame(neuropil_signals[seq_idx].T)
 
-         WINDOW_SIZE = 45
-         SIGMA = 5
+         WINDOW_SIZE = 1.5*frame_rate
+         SIGMA = frame_rate/1.5
          neuropil_smoothed.append(pd.stats.moments.rolling_window(
              df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
              win_type='gaussian', std=SIGMA).values.T)
@@ -136,8 +136,8 @@ def subtract_neuropil(imset, channel, label, min_distance=0, grid_dim=(3, 3),
              # CENTERED ABOUT 3 (INSTEAD OF 1)
              correction_factors = np.array([correction_frame.sum() \
                      for correction_frame in weighted_correction])
-             corrected_timecourse = raw_timecourse - (correction_factors / \
-                 np.nanmean(correction_factors) - 1)
+             corrected_timecourse = raw_timecourse - 0.05 * (correction_factors-
+                     np.mean(correction_factors))
              sequence_signals.append(corrected_timecourse)
          sequence_signals.append(np.array(corrected_signals))
      return sequence_signals

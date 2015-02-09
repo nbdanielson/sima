@@ -1041,8 +1041,11 @@ class _IndexedSequence(_WrapperSequence):
         min_y = np.min(disps[:, :, :, 0])
         min_x = np.min(disps[:, :, :, 1])
 
+        base_class = d['base']['base']['base']['__class__']
         base_base_dict = d['base']['base'].copy()
         b = base_base_dict.pop('__class__')._from_dict(base_base_dict, savedir)
+        d['base']['base']['base']['__class__'] = base_class
+
         width_y = b.shape[2]
         width_x = b.shape[3]
 

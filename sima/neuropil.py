@@ -16,6 +16,7 @@ References
 """
 
 from scipy import ndimage
+from scipy.signal import butter, lfilter, freqz
 from matplotlib.mlab import dist
 import numpy as np
 import pandas as pd
@@ -85,7 +86,7 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
      for seq_idx in xrange(len(neuropil_signals)):
          df = pd.DataFrame(neuropil_signals[seq_idx].T)
 
-         WINDOW_SIZE = 1.5*frame_rate
+         WINDOW_SIZE = int(1.5*frame_rate)
          SIGMA = frame_rate/1.5
          neuropil_smoothed.append(pd.stats.moments.rolling_window(
              df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
@@ -138,6 +139,16 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
                      for correction_frame in weighted_correction])
              corrected_timecourse = raw_timecourse - 0.05 * (correction_factors-
                      np.mean(correction_factors))
+             lpf_raw = butterworth(raw_timecourse, frame_rate, 5, 3)
+             lpf_corrected = butterworth(corrected_timecourse, frame_rate, 5, 3)
              sequence_signals.append(corrected_timecourse)
          sequence_signals.append(np.array(corrected_signals))
      return sequence_signals
+
+def butterworth(data, fs, order, cutoff):
+    nyquist = 0.5*fs
+    b,a = butter(order, cutoff/nyquist, btype='low', analog=False)
+    y = lfilter(b,a,data)
+    return y
+
+

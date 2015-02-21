@@ -16,7 +16,6 @@ References
 """
 
 from scipy import ndimage
-from scipy.signal import butter, lfilter, freqz
 from matplotlib.mlab import dist
 import numpy as np
 import pandas as pd
@@ -28,7 +27,6 @@ from pudb import set_trace
 
 def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid_dim=(3, 3),
                       contamination_ratio = 1):
-     set_trace()
      # pulling out the raw imaging signals (one t-series per sequence per ROI)
      signals = imset.signals(channel=channel)
      raw_signals = signals[label]['raw']
@@ -82,15 +80,15 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
      neuropil_extracted = extract_rois(
          imset, neuropil_rois, channel, remove_overlap=True)
      neuropil_signals = neuropil_extracted['raw']
-     neuropil_smoothed = []
-     for seq_idx in xrange(len(neuropil_signals)):
-         df = pd.DataFrame(neuropil_signals[seq_idx].T)
+     neuropil_smoothed = neuropil_signals
+    #  for seq_idx in xrange(len(neuropil_signals)):
+    #      df = pd.DataFrame(neuropil_signals[seq_idx].T)
 
-         WINDOW_SIZE = int(1.5*frame_rate)
-         SIGMA = frame_rate/1.5
-         neuropil_smoothed.append(pd.stats.moments.rolling_window(
-             df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
-             win_type='gaussian', std=SIGMA).values.T)
+    #      WINDOW_SIZE = int(1.5*frame_rate)
+    #      SIGMA = frame_rate/1.5
+    #      neuropil_smoothed.append(pd.stats.moments.rolling_window(
+    #          df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
+    #          win_type='gaussian', std=SIGMA).values.T)
 
      # should be a list of 2D numpy arrays (rois x time)
      corrected_timecourses = []
@@ -117,6 +115,13 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
      corrected_signals = []
      for seq_idx in xrange(len(raw_signals)):
          sequence_signals = []
+         set_trace()
+         # Vertically track raw signals (rois x frames) for unlikely events
+         dff = np.apply_along_axis(lambda x: (x - np.mean(x))/np.mean(x),axis=1, arr=raw_signals[seq_idx])
+         bin_dff = np.apply_along_axis(lambda x: x >= np.mean(x), axis = 1, arr=dff)
+         colsums = bin_dff.sum(axis=0)
+         #if more than half of ROIs are 1, neuropil event; array of bool indicating which
+         np_frames = np.array(map(lambda x: x >= 0.5*bin_dff.shape[0], colsums))
          for raw_timecourse, roi_centroid in it.izip(
                  raw_signals[seq_idx], roi_centroids):
              distances = np.zeros(grid_dim)
@@ -137,18 +142,10 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
              # CENTERED ABOUT 3 (INSTEAD OF 1)
              correction_factors = np.array([correction_frame.sum() \
                      for correction_frame in weighted_correction])
-             corrected_timecourse = raw_timecourse - 0.05 * (correction_factors-
+             corrected_timecourse = raw_timecourse - 0.05 *(1+np_frames)* (correction_factors-
                      np.mean(correction_factors))
-             lpf_raw = butterworth(raw_timecourse, frame_rate, 5, 3)
-             lpf_corrected = butterworth(corrected_timecourse, frame_rate, 5, 3)
              sequence_signals.append(corrected_timecourse)
          sequence_signals.append(np.array(corrected_signals))
      return sequence_signals
-
-def butterworth(data, fs, order, cutoff):
-    nyquist = 0.5*fs
-    b,a = butter(order, cutoff/nyquist, btype='low', analog=False)
-    y = lfilter(b,a,data)
-    return y
 
 

@@ -26,12 +26,11 @@ from pudb import set_trace
 
 
 def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid_dim=(3, 3),
-                      contamination_ratio = 1):
+                      contamination_ratio = 1, apply_smoothing = False, algorithm="global"):
      # pulling out the raw imaging signals (one t-series per sequence per ROI)
      signals = imset.signals(channel=channel)
      raw_signals = signals[label]['raw']
      rois = ROIList(signals[label]['rois'])
-     # mean_frame = np.squeeze(signals[label]['mean_frame'])
      # Initialize mask (all True).  shape is zyx
      nonROI_mask = []  # one level for each z-plane
      for plane in xrange(len(rois[0].mask)):
@@ -60,21 +59,24 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
 
      # SPATIAL MASK: LOOK FOR AXON SHADOWS
          # Vertically track raw signals (rois x frames) for unlikely events
+     set_trace()
      for seq_idx in xrange(len(raw_signals)):
          dff = np.apply_along_axis(lambda x: (x - np.mean(x))/np.mean(x),axis=1, arr=raw_signals[seq_idx])
-         bin_dff = np.apply_along_axis(lambda x: x >= np.mean(x), axis = 1, arr=dff)
-         colsums = bin_dff.sum(axis=0)
+         binary_dff = np.apply_along_axis(lambda x: x >= np.mean(x), axis = 1, arr=dff)
+         highs_in_column = binary_dff.sum(axis=0)
          #if more than half of ROIs are 1, neuropil event; array of bool indicating which
-         np_frames = np.array(map(lambda x: x >= 0.5*bin_dff.shape[0], colsums))
-         idx = filter(lambda x: np_frames[x], range(len(np_frames)))
-         np_frame_list = map(lambda x: np.squeeze(imset[seq_idx,x,:,:,:,:].time_averages), idx)
-         # Get rid of NaNs
-         np_frame_list = map(lambda x: np.nan_to_num(x), np_frame_list)
+         half = 0.5*binary_dff.shape[0]
+         np_frames = np.where(highs_in_column >= half)[0]
+         np_indices = np.where(np.frames)[0]
+         # Get rid of nans
+         np_frame_list = [np.nan_to_num(imset[seq_idx, idx,:,:,:,:].time_averages)
+                 for idx in np_indices]
          np_mean_frame = sum(np_frame_list) / len(np_frame_list)
-         np_diff = np.squeeze(np_mean_frame - signals[label]['mean_frame'])
-         np_diff = np_diff * (np_diff > 0)
+         np_mask = np.squeeze(np_mean_frame - signals[label]['mean_frame'])
+         # Zero negative values
+         np_mask = np_mask * (np_mask > 0)
 
-     # Gets coordinates of ROI boundaries; bounds right and bottom inclusive
+     # Gets coordinates of tile boundaries; bounds right and bottom inclusive
          x = nonROI_mask[plane].shape[0]
          y = nonROI_mask[plane].shape[1]
          x_bounds = map(int, np.linspace(-1, x, grid_dim[0] + 1))
@@ -85,29 +87,27 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
              for j in xrange(len(y_bounds) - 1):
                  grid[i][j][x_bounds[i] + 1:x_bounds[i + 1],
                             y_bounds[j] + 1:y_bounds[j + 1]] = 1
-                 neuropil_mask = (grid[i][j] * np_diff)
+                 neuropil_mask = (grid[i][j] * np_mask)
                  neuropil_rois.append(ROI(mask=neuropil_mask))
                  # mean_neuropil_levels[i, j] = np.sum(
                  #     neuropil_mask * mean_frame) / np.sum(neuropil_mask)
          neuropil_rois = ROIList(neuropil_rois)
-        # neuropil_rois = ROIList([ROI(np_diff)])
+        # neuropil_rois = ROIList([ROI(np_mask)])
 
-     set_trace()
      # Calculate neuropil timecourse
-     # TODO: Some np rois may be empty. Prevent extract() from turning empty rois into NaNs
      neuropil_extracted = extract_rois(
          imset, neuropil_rois, channel, remove_overlap=True)
      neuropil_signals = neuropil_extracted['raw']
-     # neuropil_signals = map(lambda x: np.squeeze(x), neuropil_signals)
-     neuropil_smoothed = neuropil_signals
-    #  for seq_idx in xrange(len(neuropil_signals)):
-    #     df = pd.DataFrame(neuropil_signals[seq_idx].T)
-
-    #     WINDOW_SIZE = int(1.5*frame_rate)
-    #     SIGMA = frame_rate/1.5
-    #     neuropil_smoothed.append(pd.stats.moments.rolling_window(
-    #       df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
-    #       win_type='gaussian', std=SIGMA).values.T)
+     if(apply_smoothing == True):
+         for seq_idx in xrange(len(neuropil_signals)):
+            df = pd.DataFrame(neuropil_signals[seq_idx].T)
+            WINDOW_SIZE = int(1.5*frame_rate)
+            SIGMA = frame_rate/1.5
+            neuropil_smoothed.append(pd.stats.moments.rolling_window(
+              df, window=WINDOW_SIZE, min_periods=WINDOW_SIZE / 2., center=True,
+              win_type='gaussian', std=SIGMA).values.T)
+     else:
+        neuropil_smoothed = neuropil_signals
 
      # should be a list of 2D numpy arrays (rois x time)
      corrected_timecourses = []
@@ -146,13 +146,12 @@ def subtract_neuropil(imset, channel, label, frame_rate=15, min_distance=0, grid
              # weights *= mean_neuropil_levels
              correction = np.array(neuropil_smoothed[seq_idx]).reshape(
                  grid_dim + (len(neuropil_smoothed[seq_idx][0, :]),), order='F')
-             weighted_correction = map(
-                 lambda x: weights * np.squeeze(x),
+             weighted_correction = map(lambda x: weights * np.squeeze(x),
                  np.dsplit(correction, len(neuropil_smoothed[seq_idx][0, :])))
-             correction_factors = np.array([correction_frame.sum() \
+             neuropil_timecourse = np.array([correction_frame.sum() \
                      for correction_frame in weighted_correction])
-             corrected_timecourse = raw_timecourse - 0.05 *(1+np_frames)* (correction_factors-
-                     np.mean(correction_factors))
+             neuropil_timecourse = neuropil_timecourse / np.mean(neuropil_timecourse) - 1
+             corrected_timecourse = raw_timecourse - 0.05*neuropil_timecourse
              sequence_signals.append(corrected_timecourse)
          sequence_signals.append(np.array(corrected_signals))
      return sequence_signals

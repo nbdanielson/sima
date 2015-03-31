@@ -15,14 +15,13 @@ from sima.misc import TransformError, estimate_array_transform, \
 def clip(ref, target):
     """
     If raw arrays are of different dimensions, try to align them automatically
-   :
+
     ref (numpy 3d array)
     target (numpy 3d array)
     """
-    #TODO: np.resize() is UNSAFE as arrays are reshaped based on memory locations
     min_dim = map(lambda x,y: min(x,y), ref.shape, target.shape)
-    corrected_ref = np.resize(ref, min_dim)
-    corrected_target = np.resize(target, min_dim)
+    corrected_ref = ref[:,0:min_dim[1], 0:min_dim[2], :]
+    corrected_target = target[:,0:min_dim[1], 0:min_dim[2], :]
     return corrected_ref, corrected_target
 
 def naive_align(ref, target):
@@ -50,14 +49,14 @@ def naive_align(ref, target):
         transforms.append(transform)
     return transforms
 
-def structure_align(ref, target, erode=1, grid=None):
+def structure_align(ref, target, close=1, grid=None):
     """
     Looks for macroscopic structures to align to
 
     Parameters:
     ref (numpy 3d-array)
     target (numpy 3d-array)
-    erode (int): Use binary erosion to clean up sets first. 0 or False for
+    close (int): Use binary erosion to clean up sets first. 0 or False for
         no erosion
     grid (tuple, optional): breaks image up into tiles, looks at structures
         in each tile for greater accuracy (approaches piecewise affine transform)
@@ -73,19 +72,23 @@ def structure_align(ref, target, erode=1, grid=None):
         feature = {}
         feature['centroid'] = np.array(center_of_mass(labeled, labeled, idx))
         feature['size'] = (labeled == idx).sum()
-        feature['index'] = index
+        feature['index'] = idx
         return feature
 
     transforms = []
 
     for ref_plane, target_plane in zip(np.split(ref, ref_dim[0], axis=0),
             np.split(target, tgt_dim[0], axis=0)):
-        bin_ref = ref_plane > ref_plane.mean()
-        bin_tgt = target_plane > target_plane.mean()
-        if erode:
-            bin_ref = morph.binary_erosion(bin_ref, iterations=erode)
-            bin_tgt = morph.binary_erosion(bin_tgt, iterations=erode)
-        isct = bin_ref*bin_tgt
+        bin_ref = np.squeeze(ref_plane > ref_plane.mean())
+        bin_tgt = np.squeeze(target_plane > target_plane.mean())
+        if close:
+            #TODO: Erode by the same amount it too aggressive but eroding by different
+            # amounts is dangerous (what if close <= 2)
+            bin_ref = morph.binary_dilation(bin_ref, iterations=close)
+            bin_ref = morph.binary_erosion(bin_ref, iterations=close-2)
+            bin_tgt = morph.binary_dilation(bin_tgt, iterations=close)
+            bin_tgt = morph.binary_erosion(bin_tgt, iterations=close-2)
+        isct = ~(bin_ref*bin_tgt)
         ref_lbl, ref_features = label(bin_ref)
         tgt_lbl, tgt_features = label(bin_tgt)
         isct_lbl, isct_features = label(isct)
@@ -97,8 +100,9 @@ def structure_align(ref, target, erode=1, grid=None):
         features = sorted(features, key=lambda d: d['size'], reverse=True)
         features = filter(lambda d: d['size'] > 16, features)
         # Associate top 5 features in tgt and ref and isct to use as anchors
+        # TODO: Figure out / ignore why first has centroid NaN
         anchors = []
-        for feature in features[0:4]:
+        for feature in features[0:5]:
             id_point = feature['centroid']
             tgt_distances = []
             ref_distances = []
@@ -115,6 +119,10 @@ def structure_align(ref, target, erode=1, grid=None):
             feature['tgt_idx'] = tgt_idx
             anchors.append(feature)
     return anchors
+
+def PCA_align(ref, target):
+    pass
+
 
 
 # TODO: WARP() isn't working right. Figure out what function is used in ROIBuddy

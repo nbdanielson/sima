@@ -12,6 +12,19 @@ from sima.segment import ca1pc
 from sima.misc import TransformError, estimate_array_transform, \
             estimate_coordinate_transform
 
+def clip(ref, target):
+    """
+    If raw arrays are of different dimensions, try to align them automatically
+   :
+    ref (numpy 3d array)
+    target (numpy 3d array)
+    """
+    #TODO: np.resize() is UNSAFE as arrays are reshaped based on memory locations
+    min_dim = map(lambda x,y: min(x,y), ref.shape, target.shape)
+    corrected_ref = np.resize(ref, min_dim)
+    corrected_target = np.resize(target, min_dim)
+    return corrected_ref, corrected_target
+
 def naive_align(ref, target):
     """
     Uses the method implemented for single plane datasets in
@@ -31,12 +44,13 @@ def naive_align(ref, target):
     # Planewise alignment
     # Automatic; assumes ith plane in ref corresponds to ith plane in target
     # LOW CONFIDENCE
-    for ref_plane, target_plane in zip(np.dsplit(ref), np.dsplit(target)):
+    for ref_plane, target_plane in zip(np.split(ref, ref_dim[0], axis=0),
+            np.split(target, tgt_dim[0], axis=0)):
         transform = estimate_array_transform(ref, target, method='affine')
         transforms.append(transform)
     return transforms
 
-def structure_align(ref, target, erode=2, grid=None):
+def structure_align(ref, target, erode=1, grid=None):
     """
     Looks for macroscopic structures to align to
 
@@ -52,7 +66,9 @@ def structure_align(ref, target, erode=2, grid=None):
     - Assumes exact correspondence of planes
     - Assumes underlying landmarks, e.g. blood vessels or other macro features
     """
-
+    set_trace()
+    ref_dim = ref.shape
+    tgt_dim = target.shape
     def feature_dict(labeled, idx):
         feature = {}
         feature['centroid'] = np.array(center_of_mass(labeled, labeled, idx))
@@ -62,13 +78,14 @@ def structure_align(ref, target, erode=2, grid=None):
 
     transforms = []
 
-    for ref_plane, target_plane in zip(np.dsplit(ref), np.dsplit(target)):
+    for ref_plane, target_plane in zip(np.split(ref, ref_dim[0], axis=0),
+            np.split(target, tgt_dim[0], axis=0)):
         bin_ref = ref_plane > ref_plane.mean()
-        bin_target = target_plane > target_plane.mean()
+        bin_tgt = target_plane > target_plane.mean()
         if erode:
             bin_ref = morph.binary_erosion(bin_ref, iterations=erode)
-            bin_tgt = morph.binary_erosion(bin_target, iterations=erode)
-        isct = bin_ref * bin_ref*bin_target
+            bin_tgt = morph.binary_erosion(bin_tgt, iterations=erode)
+        isct = bin_ref*bin_tgt
         ref_lbl, ref_features = label(bin_ref)
         tgt_lbl, tgt_features = label(bin_tgt)
         isct_lbl, isct_features = label(isct)

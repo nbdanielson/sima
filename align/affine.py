@@ -3,6 +3,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 import scipy.ndimage.morphology as morph
 from scipy.ndimage.measurements import label, labeled_comprehension, center_of_mass
+from scipy.stats import mode
 from pudb import set_trace
 from skimage.transform import PiecewiseAffineTransform, warp
 from sklearn.decomposition import FastICA
@@ -76,12 +77,36 @@ def structure_align(ref, target, close=1, grid=None):
         feature['index'] = idx
         return feature
 
+    def identify(ref, target):
+        """ LABELED ARRAYS: score, feature index, source index  index """
+        features = []
+        for lbl in xrange(1,target.max()):
+            mask = target == lbl
+            isct = ref * mask
+            idxs, counts = mode(isct, axis=None)
+            size_in_target = mask.sum()
+            candidates = []
+            for candidate, cnt in zip(idxs, counts):
+                size_in_ref = (ref == candidate).sum()
+                size_in_isct = cnt
+                score = size_in_isct / size_in_ref * size_in_isct / size_in_target *\
+                        size_in_isct
+                candidates.append({'candidate': candidate, 'score': score, 'overlap':cnt})
+            ref_lbl = max(candidates, key=lambda x: x['score'])
+            feature = {}
+            feature['tgt_lbl'] = lbl
+            feature['ref_lbl'] = ref_lbl['candidate']
+            feature['score'] = ref_lbl['score']
+            feature['size'] = ref_lbl['overlap']
+            features.append(feature)
+        return features
+
     transforms = []
 
     for ref_plane, target_plane in zip(np.split(ref, ref_dim[0], axis=0),
             np.split(target, tgt_dim[0], axis=0)):
-        bin_ref = np.squeeze(ref_plane > ref_plane.mean())
-        bin_tgt = np.squeeze(target_plane > target_plane.mean())
+        bin_ref = np.squeeze(ref_plane < ref_plane.mean())
+        bin_tgt = np.squeeze(target_plane < target_plane.mean())
         if close:
             #TODO: Erode by the same amount it too aggressive but eroding by different
             # amounts is dangerous (what if close <= 2)
@@ -89,41 +114,36 @@ def structure_align(ref, target, close=1, grid=None):
             bin_ref = morph.binary_erosion(bin_ref, iterations=close-2)
             bin_tgt = morph.binary_dilation(bin_tgt, iterations=close)
             bin_tgt = morph.binary_erosion(bin_tgt, iterations=close-2)
-        isct = ~(bin_ref*bin_tgt)
-        ref_lbl, ref_features = label(bin_ref, structure=np.ones(3,3))
-        tgt_lbl, tgt_features = label(bin_tgt, structure=np.ones(3,3))
-        isct_lbl, isct_features = label(isct)
-        # Construct dictionaries from the intersection of feature sizes
-        # and locations (center of mass)
-        tgt_features = [feature_dict(tgt_lbl, idx) for idx in xrange(tgt_features)]
-        ref_features = [feature_dict(ref_lbl, idx) for idx in xrange(ref_features)]
+        # isct = ~(bin_ref*bin_tgt)
+        ref_lbl, ref_features = label(bin_ref)
+        tgt_lbl, tgt_features = label(bin_tgt)
+        features = identify(ref_lbl, tgt_lbl)
+        #isct_lbl, isct_features = label(isct, structure=np.ones(3,3))
+        ## Construct dictionaries from the intersection of feature sizes
+        ## and locations (center of mass)
+        #tgt_features = [feature_dict(tgt_lbl, idx) for idx in xrange(tgt_features)]
+        #ref_features = [feature_dict(ref_lbl, idx) for idx in xrange(ref_features)]
 
-        # HACK SOLUTION TO NAN PROBLEM
-        tgt_features = filter(lambda x: not np.isnan(x['centroid'][0]), tgt_features)
-        ref_features = filter(lambda x: not np.isnan(x['centroid'][0]), ref_features)
+        ## HACK SOLUTION TO NAN PROBLEM
+        #tgt_features = filter(lambda x: not np.isnan(x['centroid'][0]), tgt_features)
+        #ref_features = filter(lambda x: not np.isnan(x['centroid'][0]), ref_features)
 
-        features = [feature_dict(isct_lbl, idx) for idx in xrange(isct_features)]
-        features = sorted(features, key=lambda d: d['size'], reverse=True)
-        features = filter(lambda d: d['size'] > 16, features)
-        # Associate top 5 features in tgt and ref and isct to use as anchors
-        # TODO: Figure out / ignore why first has centroid NaN
-        anchors = []
-        for feature in features[0:5]:
-            id_point = feature['centroid']
-            tgt_distances = []
-            ref_distances = []
-            for tgt_feature in tgt_features:
-                point = tgt_feature['centroid']
-                dist = np.linalg.norm(id_point-point)
-                tgt_distances.append({'dist':dist, 'idx':tgt_feature['index']})
-            for ref_feature in ref_features:
-                point = ref_feature['centroid']
-                ref_distances.append({'dist':dist, 'idx':ref_feature['index']})
-            ref_idx = min(ref_distances, key=lambda x: x['dist'])['idx']
-            tgt_idx = min(tgt_distances, key=lambda x: x['dist'])['idx']
-            feature['ref_idx'] = ref_idx
-            feature['tgt_idx'] = tgt_idx
-            anchors.append(feature)
+        #features = [feature_dict(isct_lbl, idx) for idx in xrange(isct_features)]
+        #features = sorted(features, key=lambda d: d['size'], reverse=True)
+        #features = filter(lambda d: d['size'] > 16, features)
+        ## Associate top 5 features in tgt and ref and isct to use as anchors
+        ## TODO: Figure out / ignore why first has centroid NaN
+        #anchors = []
+        #for feature in features:
+        #    lbl = feature['idx']
+        #    mask = isct_lbl[isct_lbl == lbl] / lbl
+        #    refXmask = ref_lbl * mask
+        #    tgtXmask = tgt_lbl * mask
+        #    ref_idx, ref_cnts = mode(refXmask)
+        #    tgt_idx, tgt_cnts = mode(tgtXmask)
+
+        #labeled_comprehension(isct_lbl, None, None, )
+        anchors.append(feature)
     return anchors
 
 def ICA_align(ref, target, n_components = 2):

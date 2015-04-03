@@ -5,6 +5,7 @@ import scipy.ndimage.morphology as morph
 from scipy.ndimage.measurements import label, labeled_comprehension, center_of_mass
 from pudb import set_trace
 from skimage.transform import PiecewiseAffineTransform, warp
+from sklearn.decomposition import FastICA
 import sima
 from sima.imaging import ImagingDataset
 from sima.ROI import ROIList, ROI, mask2poly, poly2mask
@@ -89,13 +90,18 @@ def structure_align(ref, target, close=1, grid=None):
             bin_tgt = morph.binary_dilation(bin_tgt, iterations=close)
             bin_tgt = morph.binary_erosion(bin_tgt, iterations=close-2)
         isct = ~(bin_ref*bin_tgt)
-        ref_lbl, ref_features = label(bin_ref)
-        tgt_lbl, tgt_features = label(bin_tgt)
+        ref_lbl, ref_features = label(bin_ref, structure=np.ones(3,3))
+        tgt_lbl, tgt_features = label(bin_tgt, structure=np.ones(3,3))
         isct_lbl, isct_features = label(isct)
         # Construct dictionaries from the intersection of feature sizes
         # and locations (center of mass)
         tgt_features = [feature_dict(tgt_lbl, idx) for idx in xrange(tgt_features)]
         ref_features = [feature_dict(ref_lbl, idx) for idx in xrange(ref_features)]
+
+        # HACK SOLUTION TO NAN PROBLEM
+        tgt_features = filter(lambda x: not np.isnan(x['centroid'][0]), tgt_features)
+        ref_features = filter(lambda x: not np.isnan(x['centroid'][0]), ref_features)
+
         features = [feature_dict(isct_lbl, idx) for idx in xrange(isct_features)]
         features = sorted(features, key=lambda d: d['size'], reverse=True)
         features = filter(lambda d: d['size'] > 16, features)
@@ -120,9 +126,15 @@ def structure_align(ref, target, close=1, grid=None):
             anchors.append(feature)
     return anchors
 
+def ICA_align(ref, target, n_components = 2):
+    set_trace()
+    ica = FastICA(n_components = n_components, whiten=True)
+    S = ica.fit_transform(np.squeeze(ref[0]))
+    T = ica.fit_transform(np.squeeze(target[0]))
+    return S,T
+
 def PCA_align(ref, target):
     pass
-
 
 
 # TODO: WARP() isn't working right. Figure out what function is used in ROIBuddy

@@ -1085,38 +1085,40 @@ class _IndexedSequence(_WrapperSequence):
         else:
             if np.min(d['base']['displacements']) >= 0:
                 return super(_IndexedSequence, cls)._from_dict(d, savedir)
+            else:
+                raise('Negative displacements')
 
-        disps = d['base']['displacements']
-        min_y = np.min(disps[:, :, :, 0])
-        min_x = np.min(disps[:, :, :, 1])
+        # disps = d['base']['displacements']
+        # min_y = np.min(disps[:, :, :, 0])
+        # min_x = np.min(disps[:, :, :, 1])
 
-        base_class = d['base']['base']['base']['__class__']
-        base_base_dict = d['base']['base'].copy()
-        b = base_base_dict.pop('__class__')._from_dict(base_base_dict, savedir)
-        d['base']['base']['base']['__class__'] = base_class
+        # base_class = d['base']['base']['base']['__class__']
+        # base_base_dict = d['base']['base'].copy()
+        # b = base_base_dict.pop('__class__')._from_dict(base_base_dict, savedir)
+        # d['base']['base']['base']['__class__'] = base_class
 
-        width_y = b.shape[2]
-        width_x = b.shape[3]
+        # width_y = b.shape[2]
+        # width_x = b.shape[3]
 
-        d['base']['displacements'][:, :, :, 0] -= min_y
-        d['base']['displacements'][:, :, :, 1] -= min_x
+        # d['base']['displacements'][:, :, :, 0] -= min_y
+        # d['base']['displacements'][:, :, :, 1] -= min_x
 
-        new_indices = list(d['indices'])
-        new_indices[2] = slice(new_indices[2].start - min_y,
-                               new_indices[2].stop - min_y,
-                               new_indices[2].step)
-        new_indices[3] = slice(new_indices[3].start - min_x,
-                               new_indices[3].stop - min_x,
-                               new_indices[3].step)
-        d['indices'] = tuple(new_indices)
+        # new_indices = list(d['indices'])
+        # new_indices[2] = slice(new_indices[2].start - min_y,
+        #                        new_indices[2].stop - min_y,
+        #                        new_indices[2].step)
+        # new_indices[3] = slice(new_indices[3].start - min_x,
+        #                        new_indices[3].stop - min_x,
+        #                        new_indices[3].step)
+        # d['indices'] = tuple(new_indices)
 
-        max_y = np.max(d['base']['displacements'][:, :, :, 0])
-        max_x = np.max(d['base']['displacements'][:, :, :, 1])
+        # max_y = np.max(d['base']['displacements'][:, :, :, 0])
+        # max_x = np.max(d['base']['displacements'][:, :, :, 1])
 
-        d['base']['extent'] = (
-            d['base']['extent'][0], width_y + max_y, width_x + max_x)
+        # d['base']['extent'] = (
+        #     d['base']['extent'][0], width_y + max_y, width_x + max_x)
 
-        return super(_IndexedSequence, cls)._from_dict(d, savedir)
+        # return super(_IndexedSequence, cls)._from_dict(d, savedir)
 
     # def __dir__(self):
     #     """Customize how attributes are reported, e.g. for tab completion.

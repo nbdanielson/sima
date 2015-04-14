@@ -3,7 +3,7 @@ import scipy as sp
 import matplotlib.pyplot as plt
 import scipy.ndimage.morphology as morph
 from scipy.ndimage.measurements import label, labeled_comprehension, center_of_mass
-from scipy.stats import mode
+from scipy.stats import itemfreq
 from pudb import set_trace
 from skimage.transform import PiecewiseAffineTransform, warp
 from sklearn.decomposition import FastICA
@@ -82,23 +82,30 @@ def structure_align(ref, target, close=1, grid=None):
         features = []
         for lbl in xrange(1,target.max()):
             mask = target == lbl
-            isct = ref * mask
-            idxs, counts = mode(isct, axis=None)
-            size_in_target = mask.sum()
-            candidates = []
-            for candidate, cnt in zip(idxs, counts):
-                size_in_ref = (ref == candidate).sum()
-                size_in_isct = cnt
-                score = size_in_isct / size_in_ref * size_in_isct / size_in_target *\
-                        size_in_isct
-                candidates.append({'candidate': candidate, 'score': score, 'overlap':cnt})
-            ref_lbl = max(candidates, key=lambda x: x['score'])
-            feature = {}
-            feature['tgt_lbl'] = lbl
-            feature['ref_lbl'] = ref_lbl['candidate']
-            feature['score'] = ref_lbl['score']
-            feature['size'] = ref_lbl['overlap']
-            features.append(feature)
+            if mask.sum() > 100:
+                isct = ref * mask
+                freqs = itemfreq(isct)
+                freqs = freqs[freqs[:,0] != 0]
+                #TODO: BROKEN
+                #REDO CODE FOR counts, idxs
+                counts = counts[idxs != 0]
+                idxs = idxs[idxs != 0]
+                size_in_target = mask.sum()
+                candidates = []
+                if size_in_target != 0 and len(idxs) != 0:
+                    for candidate, cnt in zip(idxs, counts):
+                        size_in_ref = (ref == candidate).sum()
+                        size_in_isct = cnt
+                        score = size_in_isct / size_in_ref * size_in_isct / size_in_target *\
+                            size_in_isct
+                        candidates.append({'candidate': candidate, 'score': score, 'overlap':cnt})
+                    ref_lbl = max(candidates, key=lambda x: x['score'])
+                    feature = {}
+                    feature['tgt_lbl'] = lbl
+                    feature['ref_lbl'] = ref_lbl['candidate']
+                    feature['score'] = ref_lbl['score']
+                    feature['size'] = ref_lbl['overlap']
+                    features.append(feature)
         return features
 
     transforms = []
@@ -144,11 +151,13 @@ def structure_align(ref, target, close=1, grid=None):
 
         #labeled_comprehension(isct_lbl, None, None, )
         anchors.append(feature)
+
     return anchors
 
-def ICA_align(ref, target, n_components = 2):
+#TODO: Not yet implemented
+def ICA_align(ref, target):
     set_trace()
-    ica = FastICA(n_components = n_components, whiten=True)
+    ica = FastICA(whiten=True)
     S = ica.fit_transform(np.squeeze(ref[0]))
     T = ica.fit_transform(np.squeeze(target[0]))
     return S,T

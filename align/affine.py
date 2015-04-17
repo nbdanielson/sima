@@ -86,17 +86,18 @@ def structure_align(ref, target, close=1, grid=None):
                 isct = ref * mask
                 freqs = itemfreq(isct)
                 freqs = freqs[freqs[:,0] != 0]
+                freqs = freqs[freqs[:,1].argsort()]
                 #TODO: BROKEN
                 #REDO CODE FOR counts, idxs
-                counts = counts[idxs != 0]
-                idxs = idxs[idxs != 0]
+                counts = freqs[:,1]
+                idxs = freqs[:,0]
                 size_in_target = mask.sum()
                 candidates = []
                 if size_in_target != 0 and len(idxs) != 0:
                     for candidate, cnt in zip(idxs, counts):
                         size_in_ref = (ref == candidate).sum()
                         size_in_isct = cnt
-                        score = size_in_isct / size_in_ref * size_in_isct / size_in_target *\
+                        score = float(size_in_isct) / size_in_ref * size_in_isct / size_in_target *\
                             size_in_isct
                         candidates.append({'candidate': candidate, 'score': score, 'overlap':cnt})
                     ref_lbl = max(candidates, key=lambda x: x['score'])

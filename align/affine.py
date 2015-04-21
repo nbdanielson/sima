@@ -31,7 +31,7 @@ def naive_align(ref, target):
     Uses the method implemented for single plane datasets in
     ROIBuddy to automatically attempt to fit ref to target, plane
     by plane.
-
+    Test edit
     Parameters:
     ref (numpy 3d array)
     target (numpy 3d array)
@@ -97,9 +97,10 @@ def structure_align(ref, target, close=1, grid=None):
                     for candidate, cnt in zip(idxs, counts):
                         size_in_ref = (ref == candidate).sum()
                         size_in_isct = cnt
-                        score = float(size_in_isct) / size_in_ref * size_in_isct / size_in_target *\
-                            size_in_isct
-                        candidates.append({'candidate': candidate, 'score': score, 'overlap':cnt})
+                        score = float(size_in_isct) / size_in_ref *\
+                                size_in_isct / size_in_target * size_in_isct
+                        candidates.append({'candidate': candidate,\
+                                'score': score, 'overlap':cnt})
                     ref_lbl = max(candidates, key=lambda x: x['score'])
                     feature = {}
                     feature['tgt_lbl'] = lbl
@@ -116,44 +117,25 @@ def structure_align(ref, target, close=1, grid=None):
         bin_ref = np.squeeze(ref_plane < ref_plane.mean())
         bin_tgt = np.squeeze(target_plane < target_plane.mean())
         if close:
-            #TODO: Erode by the same amount it too aggressive but eroding by different
-            # amounts is dangerous (what if close <= 2)
+            #TODO: Erode by the same amount it too aggressive
             bin_ref = morph.binary_dilation(bin_ref, iterations=close)
-            bin_ref = morph.binary_erosion(bin_ref, iterations=close-2)
+            bin_ref = morph.binary_erosion(bin_ref, iterations=close)
             bin_tgt = morph.binary_dilation(bin_tgt, iterations=close)
-            bin_tgt = morph.binary_erosion(bin_tgt, iterations=close-2)
-        # isct = ~(bin_ref*bin_tgt)
+            bin_tgt = morph.binary_erosion(bin_tgt, iterations=close)
         ref_lbl, ref_features = label(bin_ref)
         tgt_lbl, tgt_features = label(bin_tgt)
         features = identify(ref_lbl, tgt_lbl)
-        #isct_lbl, isct_features = label(isct, structure=np.ones(3,3))
-        ## Construct dictionaries from the intersection of feature sizes
-        ## and locations (center of mass)
-        #tgt_features = [feature_dict(tgt_lbl, idx) for idx in xrange(tgt_features)]
-        #ref_features = [feature_dict(ref_lbl, idx) for idx in xrange(ref_features)]
-
-        ## HACK SOLUTION TO NAN PROBLEM
-        #tgt_features = filter(lambda x: not np.isnan(x['centroid'][0]), tgt_features)
-        #ref_features = filter(lambda x: not np.isnan(x['centroid'][0]), ref_features)
-
-        #features = [feature_dict(isct_lbl, idx) for idx in xrange(isct_features)]
-        #features = sorted(features, key=lambda d: d['size'], reverse=True)
-        #features = filter(lambda d: d['size'] > 16, features)
-        ## Associate top 5 features in tgt and ref and isct to use as anchors
-        ## TODO: Figure out / ignore why first has centroid NaN
-        #anchors = []
-        #for feature in features:
-        #    lbl = feature['idx']
-        #    mask = isct_lbl[isct_lbl == lbl] / lbl
-        #    refXmask = ref_lbl * mask
-        #    tgtXmask = tgt_lbl * mask
-        #    ref_idx, ref_cnts = mode(refXmask)
-        #    tgt_idx, tgt_cnts = mode(tgtXmask)
-
-        #labeled_comprehension(isct_lbl, None, None, )
         anchors.append(feature)
-
+    # WILL SUCCESSFULLY IDENTIFY SALIENT FEATURES (BLOOD VESSELS, ETC) IF PRESENT
+    # RECOMMEND SORTING BY SIZE
+    # NEXT STEPS: TRANSLATE RECOGNIZED REGIONS INTO REGISTRATION / ANCHOR POINTS
     return anchors
+
+def piecewise_align(ref, target, grid=(3,3)):
+    pass
+
+def anchor_piecewise_align(ref, target, method, **method_kwargs):
+    return estimate_coordinate_transform(ref, target, method, **method_kwargs)
 
 #TODO: Not yet implemented
 def ICA_align(ref, target):
@@ -192,4 +174,3 @@ def apply_transform(initSets, targetSet, tf_method, **kwargs):
         transformed_set = np.dstack(tf_planes)
     transformed_sets.append(transformed_set)
     return transformed_sets
-

@@ -32,8 +32,9 @@ else:
 import sima
 import sima.misc
 from sima.misc import mkdir_p, most_recent_key, estimate_array_transform, \
-    estimate_coordinate_transform
+    estimate_coordinate_transform, TransformError
 from sima.extract import extract_rois, save_extracted_signals
+from sima.segment import ca1pc
 from sima.ROI import ROIList
 
 from future import standard_library
@@ -422,6 +423,15 @@ class ImagingDataset(object):
 
         if anchor_label is None:
             try:
+                transforms = [estimate_array_transform(s, t, method=method)
+                              for s, t in zip(source, target)]
+            except TransformError:
+                pass
+            try:
+                source = ca1pc._processed_image_ca1pc(
+                    source_dataset, channel_idx=-1, x_diameter=10, y_diameter=10)
+                target = ca1pc._processed_image_ca1pc(
+                    self, channel_idx=-1, x_diameter=10, y_diameter=10)
                 transforms = [estimate_array_transform(s, t, method=method)
                               for s, t in zip(source, target)]
             except ValueError:

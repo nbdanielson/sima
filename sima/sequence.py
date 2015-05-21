@@ -790,8 +790,8 @@ class _MotionCorrectedSequence(_WrapperSequence):
 
     def __init__(self, base, displacements, extent=None):
         super(_MotionCorrectedSequence, self).__init__(base)
-        if np.min(displacements) < 0:
-            raise ValueError("All displacements must be non-negative")
+        # if np.min(displacements) < 0:
+        #     raise ValueError("All displacements must be non-negative")
         self.displacements = displacements.astype('int')
         if extent is None:
             max_disp = np.nanmax([np.nanmax(d.reshape(-1, d.shape[-1]), 0)
@@ -1105,10 +1105,10 @@ class _IndexedSequence(_WrapperSequence):
         if not d['base']['__class__'] == _MotionCorrectedSequence:
             return super(_IndexedSequence, cls)._from_dict(d, savedir)
         else:
-            if np.min(d['base']['displacements']) >= 0:
-                return super(_IndexedSequence, cls)._from_dict(d, savedir)
-            else:
-                raise('Negative displacements')
+            # if np.min(d['base']['displacements']) >= 0:
+            return super(_IndexedSequence, cls)._from_dict(d, savedir)
+            # else:
+                # raise('Negative displacements')
 
         # disps = d['base']['displacements']
         # min_y = np.min(disps[:, :, :, 0])
